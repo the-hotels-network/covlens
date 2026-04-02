@@ -1,0 +1,24 @@
+# Coverage output
+.coverage/
+*.out
+
+# Built binary (go build ./cmd/covlens)
+/covlens
+
+# Go toolchain
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude
+.agents/
+skills-lock.json

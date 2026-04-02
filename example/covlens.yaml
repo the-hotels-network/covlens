@@ -1,0 +1,61 @@
+# covlens configuration reference
+# Place this file as covlens.yaml at your project root.
+# All fields are optional — missing fields fall back to the defaults shown here.
+# CLI flags always override values in this file.
+
+# Branch to compare against. covlens runs `git merge-base HEAD <base_branch>`
+# and considers all .go files changed since that point.
+base_branch: main
+
+# Minimum coverage percentage required for the lines you changed.
+# covlens intersects coverage profile blocks with git diff hunks, so only
+# the statements inside your changed line ranges count toward this number.
+# Range: 0–100. Exit code 1 if not met.
+diff_threshold: 80
+
+# Minimum coverage percentage required for the entire project (all packages).
+# Computed from a separate `go test ./...` run across all module roots.
+# Range: 0–100. Exit code 1 if not met.
+total_threshold: 70
+
+# Directory where coverage profiles and the HTML report are written.
+# Created automatically if it doesn't exist.
+output_dir: .coverage
+
+# Open the HTML report in the default browser after a successful run.
+# Disable in CI by setting this to false or passing --no-open.
+auto_open: true
+
+# Show excluded files in the HTML report with a grey "excluded" badge.
+# Set to false to hide them entirely.
+show_excluded: true
+
+# List of regular expressions. Any changed file whose path matches at least
+# one pattern is excluded from diff coverage (but still shown in the report
+# when show_excluded is true).
+#
+# Patterns are matched against the git-relative file path, e.g.:
+#   "internal/auth/handler.go"
+#
+# Examples:
+#   exclude_files:
+#     - "_mock\\.go$"       # generated mocks
+#     - "_gen\\.go$"        # generated code
+#     - "^vendor/"          # vendored dependencies
+#     - "^testdata/"        # test fixtures
+#     - "cmd/migrate/"      # one-off migration scripts
+exclude_files: []
+
+# When true, the total coverage check compares the current total against the
+# coverage at the merge-base commit (base branch), rather than total_threshold.
+# covlens checks out the merge-base in a temporary worktree, runs tests there,
+# and fails only if total coverage dropped by more than 0.1 percentage points.
+# Useful for gradually-improving projects where an absolute threshold is hard to set.
+# Falls back to total_threshold if the baseline cannot be computed (e.g. first run).
+ratchet_total: false
+
+# Default theme for the HTML report: "auto", "light", or "dark".
+# "auto" follows the OS/browser preference (default).
+# Users can always switch themes via the in-page toggle; their choice is saved
+# in localStorage and overrides this setting on subsequent opens.
+theme: auto
