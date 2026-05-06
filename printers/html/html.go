@@ -1,5 +1,5 @@
-// Package report generates self-contained HTML coverage reports for covlens.
-package report
+// Package html generates self-contained HTML coverage reports for covlens.
+package html
 
 import (
 	"fmt"

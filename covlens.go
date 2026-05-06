@@ -18,7 +18,7 @@ import (
 	"github.com/erioch/covlens/directive"
 	"github.com/erioch/covlens/git"
 	"github.com/erioch/covlens/packages"
-	"github.com/erioch/covlens/report"
+	"github.com/erioch/covlens/printers/html"
 )
 
 // Run executes the full coverage analysis pipeline.
@@ -348,7 +348,7 @@ func assembleReport(s *runState) error {
 
 func renderAndOpen(s *runState) error {
 	// Render source files for HTML report (diff view: only changed lines ± context).
-	var sourceFiles []report.SourceFile
+	var sourceFiles []html.SourceFile
 	profileMap := make(map[string]*cover.Profile)
 	for _, p := range s.diffProfiles {
 		profileMap[p.FileName] = p
@@ -364,9 +364,9 @@ func renderAndOpen(s *runState) error {
 			blocks = p.Blocks
 		}
 
-		var rHunks []report.Hunk
+		var rHunks []html.Hunk
 		for _, h := range s.fileHunks[fs.profileKey] {
-			rHunks = append(rHunks, report.Hunk{Start: h.Start, End: h.End})
+			rHunks = append(rHunks, html.Hunk{Start: h.Start, End: h.End})
 		}
 
 		var diffFileCov float64 = -1
@@ -374,14 +374,14 @@ func renderAndOpen(s *runState) error {
 			diffFileCov = float64(r.Covered) / float64(r.Stmts) * 100
 		}
 
-		html, err := report.RenderSource(absPath, blocks, rHunks)
+		rendered, err := html.RenderSource(absPath, blocks, rHunks)
 		if err != nil {
 			continue
 		}
-		sourceFiles = append(sourceFiles, report.SourceFile{
+		sourceFiles = append(sourceFiles, html.SourceFile{
 			Path:       fs.path,
 			Package:    fs.pkg,
-			SourceHTML: html,
+			SourceHTML: rendered,
 			Coverage:   diffFileCov,
 			Status:     fileStatusFor(diffFileCov, s.cfg.DiffThreshold),
 		})
@@ -389,9 +389,9 @@ func renderAndOpen(s *runState) error {
 
 	reportPath := filepath.Join(s.outputDir, "coverage_report.html")
 
-	var fileSummaries []report.FileSummary
+	var fileSummaries []html.FileSummary
 	for _, fc := range s.fileCoverages {
-		fileSummaries = append(fileSummaries, report.FileSummary{
+		fileSummaries = append(fileSummaries, html.FileSummary{
 			Path:       fc.Path,
 			Package:    fc.Package,
 			Coverage:   fc.Coverage,
@@ -402,7 +402,7 @@ func renderAndOpen(s *runState) error {
 		})
 	}
 
-	reportInput := report.ReportInput{
+	reportInput := html.ReportInput{
 		DiffCoverage:          s.report.DiffCoverage,
 		TotalCoverage:         s.report.TotalCoverage,
 		BaselineTotalCoverage: s.report.BaselineTotalCoverage,
@@ -417,7 +417,7 @@ func renderAndOpen(s *runState) error {
 		Files:                 fileSummaries,
 	}
 
-	if err := report.Generate(reportInput, sourceFiles, reportPath); err != nil {
+	if err := html.Generate(reportInput, sourceFiles, reportPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to generate HTML report: %v\n", err)
 	} else {
 		s.report.ReportPath = reportPath
@@ -453,8 +453,8 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 	}
 
 	var fileCoverages []FileCoverage
-	var sourceFiles []report.SourceFile
-	var fileSummaries []report.FileSummary
+	var sourceFiles []html.SourceFile
+	var fileSummaries []html.FileSummary
 
 	for _, p := range totalProfiles {
 		absPath := resolveAbsPath(p.FileName, modPathMap)
@@ -485,7 +485,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 			Covered:    covered,
 			Status:     status,
 		})
-		fileSummaries = append(fileSummaries, report.FileSummary{
+		fileSummaries = append(fileSummaries, html.FileSummary{
 			Path:       relPath,
 			Package:    pkg,
 			Coverage:   cov,
@@ -495,14 +495,14 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 		})
 
 		// nil hunks → RenderSource shows the full file
-		html, err := report.RenderSource(absPath, p.Blocks, nil)
+		rendered, err := html.RenderSource(absPath, p.Blocks, nil)
 		if err != nil {
 			continue
 		}
-		sourceFiles = append(sourceFiles, report.SourceFile{
+		sourceFiles = append(sourceFiles, html.SourceFile{
 			Path:       relPath,
 			Package:    pkg,
-			SourceHTML: html,
+			SourceHTML: rendered,
 			Coverage:   cov,
 			Status:     status,
 		})
@@ -516,7 +516,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 	}
 
 	reportPath := filepath.Join(outputDir, "coverage_report.html")
-	reportInput := report.ReportInput{
+	reportInput := html.ReportInput{
 		TotalCoverage:  r.TotalCoverage,
 		TotalPassed:    r.TotalPassed,
 		DiffPassed:     true,
@@ -527,7 +527,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 		FullMode:       true,
 		Files:          fileSummaries,
 	}
-	if err := report.Generate(reportInput, sourceFiles, reportPath); err != nil {
+	if err := html.Generate(reportInput, sourceFiles, reportPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to generate HTML report: %v\n", err)
 	} else {
 		r.ReportPath = reportPath
