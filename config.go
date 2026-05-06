@@ -2,6 +2,7 @@ package covlens
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 
@@ -25,6 +26,27 @@ type Config struct {
 	Theme    string `yaml:"theme"`
 	FullMode bool   `yaml:"-"` // set by --full CLI flag, not persisted to config
 	WorkDir  string `yaml:"-"`
+
+	// Stderr receives covlens progress lines (e.g. "▶ Running total coverage...").
+	// Defaults to os.Stderr. Set to io.Discard to silence.
+	Stderr io.Writer `yaml:"-"`
+	// TestOutput receives the streamed stdout/stderr of the `go test` subprocess.
+	// Defaults to os.Stdout. Set to io.Discard to silence.
+	TestOutput io.Writer `yaml:"-"`
+}
+
+func (c Config) stderr() io.Writer {
+	if c.Stderr == nil {
+		return os.Stderr
+	}
+	return c.Stderr
+}
+
+func (c Config) testOutput() io.Writer {
+	if c.TestOutput == nil {
+		return os.Stdout
+	}
+	return c.TestOutput
 }
 
 // DefaultConfig returns a Config with sensible defaults matching the original bash script.

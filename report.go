@@ -9,6 +9,10 @@ type Report struct {
 	TotalPassed           bool
 	Files                 []FileCoverage
 	ReportPath            string
+	// Warnings collects non-fatal issues observed during the run that
+	// callers may want to surface (e.g. a corrupt coverage profile, a
+	// per-file diff hunk failure). Fatal failures are returned as errors.
+	Warnings []string
 }
 
 // FileCoverage holds coverage data for a single source file.

@@ -144,6 +144,7 @@ type runState struct {
 
 	// output
 	fileCoverages []FileCoverage
+	warnings      []string
 	report        *Report
 }
 
@@ -242,36 +243,45 @@ func resolvePackages(s *runState) error {
 }
 
 func runCoverage(s *runState) error {
-	log("Running total coverage...")
-	tp, err := coverage.RunTotal(s.ctx, s.moduleRoots, s.outputDir, os.Stdout)
+	logProgress(s.cfg.stderr(), "Running total coverage...")
+	totalRes, err := coverage.RunTotal(s.ctx, s.moduleRoots, s.outputDir, s.cfg.testOutput())
 	if err != nil {
 		return fmt.Errorf("running total coverage: %w", err)
 	}
-	s.totalProfilePath = tp
+	s.totalProfilePath = totalRes.ProfilePath
+	s.warnings = append(s.warnings, totalRes.Warnings...)
 
-	log("Running diff coverage...")
-	dp, err := coverage.RunDiff(s.ctx, s.grouped, s.outputDir, os.Stdout)
+	logProgress(s.cfg.stderr(), "Running diff coverage...")
+	diffRes, err := coverage.RunDiff(s.ctx, s.grouped, s.outputDir, s.cfg.testOutput())
 	if err != nil {
 		return fmt.Errorf("running diff coverage: %w", err)
 	}
-	s.diffProfilePath = dp
+	s.diffProfilePath = diffRes.ProfilePath
+	s.warnings = append(s.warnings, diffRes.Warnings...)
 	return nil
 }
 
 func computeCoverage(s *runState) error {
-	s.totalCov, _ = coverage.TotalCoverage(s.totalProfilePath) // error means 0% coverage, safe to proceed
+	totalCov, err := coverage.TotalCoverage(s.totalProfilePath)
+	if err != nil {
+		s.warnings = append(s.warnings, fmt.Sprintf("could not parse total coverage profile: %v", err))
+	}
+	s.totalCov = totalCov
 
 	if s.cfg.RatchetTotal {
-		log("Computing baseline total coverage at merge-base...")
+		logProgress(s.cfg.stderr(), "Computing baseline total coverage at merge-base...")
 		bc, err := baselineTotalCoverage(s.ctx, s.gc, s.mergeBase, s.gitRoot, s.moduleRoots, s.outputDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not compute baseline coverage, falling back to threshold: %v\n", err)
-		} else {
-			s.baselineCov = bc
+			return fmt.Errorf("computing baseline coverage (required by --ratchet): %w", err)
 		}
+		s.baselineCov = bc
 	}
 
-	s.diffProfiles, _ = cover.ParseProfiles(s.diffProfilePath) // empty profiles produce zero coverage, safe to proceed
+	diffProfiles, err := cover.ParseProfiles(s.diffProfilePath)
+	if err != nil {
+		s.warnings = append(s.warnings, fmt.Sprintf("could not parse diff coverage profile: %v", err))
+	}
+	s.diffProfiles = diffProfiles
 
 	s.fileHunks = make(map[string][]git.Hunk)
 	s.excludedRanges = make(map[string][]git.Hunk)
@@ -282,6 +292,7 @@ func computeCoverage(s *runState) error {
 		}
 		hunks, err := s.gc.DiffHunks(s.ctx, s.mergeBase, fs.path)
 		if err != nil {
+			s.warnings = append(s.warnings, fmt.Sprintf("could not compute diff hunks for %s: %v", fs.path, err))
 			continue
 		}
 		s.fileHunks[fs.profileKey] = hunks
@@ -418,7 +429,7 @@ func renderAndOpen(s *runState) error {
 	}
 
 	if err := html.Generate(reportInput, sourceFiles, reportPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to generate HTML report: %v\n", err)
+		s.warnings = append(s.warnings, fmt.Sprintf("failed to generate HTML report: %v", err))
 	} else {
 		s.report.ReportPath = reportPath
 	}
@@ -427,6 +438,7 @@ func renderAndOpen(s *runState) error {
 		openBrowser(s.report.ReportPath)
 	}
 
+	s.report.Warnings = s.warnings
 	return nil
 }
 
@@ -438,14 +450,21 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 		return nil, fmt.Errorf("finding module roots: %w", err)
 	}
 
-	log("Running full coverage...")
-	profilePath, err := coverage.RunTotal(ctx, moduleRoots, outputDir, os.Stdout)
+	logProgress(cfg.stderr(), "Running full coverage...")
+	totalRes, err := coverage.RunTotal(ctx, moduleRoots, outputDir, cfg.testOutput())
 	if err != nil {
 		return nil, fmt.Errorf("running coverage: %w", err)
 	}
+	warnings := append([]string{}, totalRes.Warnings...)
 
-	totalCov, _ := coverage.TotalCoverage(profilePath)   // error means 0% coverage, safe to proceed
-	totalProfiles, _ := cover.ParseProfiles(profilePath) // empty profiles produce no file entries
+	totalCov, err := coverage.TotalCoverage(totalRes.ProfilePath)
+	if err != nil {
+		warnings = append(warnings, fmt.Sprintf("could not parse coverage profile: %v", err))
+	}
+	totalProfiles, err := cover.ParseProfiles(totalRes.ProfilePath)
+	if err != nil {
+		warnings = append(warnings, fmt.Sprintf("could not parse coverage profile blocks: %v", err))
+	}
 
 	modPathMap, err := buildModulePathMap(ctx, moduleRoots)
 	if err != nil {
@@ -528,7 +547,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 		Files:          fileSummaries,
 	}
 	if err := html.Generate(reportInput, sourceFiles, reportPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to generate HTML report: %v\n", err)
+		warnings = append(warnings, fmt.Sprintf("failed to generate HTML report: %v", err))
 	} else {
 		r.ReportPath = reportPath
 	}
@@ -536,6 +555,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 	if cfg.AutoOpen && r.ReportPath != "" {
 		openBrowser(r.ReportPath)
 	}
+	r.Warnings = warnings
 	return r, nil
 }
 
@@ -620,11 +640,11 @@ func baselineTotalCoverage(ctx context.Context, gc *git.Client, mergeBase, gitRo
 	}
 	defer os.RemoveAll(baseOutputDir)
 
-	profilePath, err := coverage.RunTotal(ctx, baseRoots, baseOutputDir, io.Discard)
+	res, err := coverage.RunTotal(ctx, baseRoots, baseOutputDir, io.Discard)
 	if err != nil {
 		return 0, err
 	}
-	return coverage.TotalCoverage(profilePath)
+	return coverage.TotalCoverage(res.ProfilePath)
 }
 
 func fileStatusFor(cov, threshold float64) string {
@@ -651,6 +671,6 @@ func openBrowser(path string) {
 	_ = cmd.Start() // fire-and-forget: browser launch failure is non-fatal
 }
 
-func log(msg string) {
-	fmt.Fprintf(os.Stderr, "\033[0;34m▶\033[0m %s\n", msg)
+func logProgress(w io.Writer, msg string) {
+	fmt.Fprintf(w, "\033[0;34m▶\033[0m %s\n", msg)
 }
