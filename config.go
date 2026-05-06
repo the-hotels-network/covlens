@@ -68,10 +68,26 @@ func (c Config) Validate() error {
 	if c.Theme != "" && c.Theme != "auto" && c.Theme != "light" && c.Theme != "dark" {
 		return fmt.Errorf("theme must be \"auto\", \"light\", or \"dark\", got %q", c.Theme)
 	}
-	for _, pattern := range c.ExcludeFiles {
-		if _, err := regexp.Compile(pattern); err != nil {
-			return fmt.Errorf("invalid exclude_files pattern %q: %w", pattern, err)
-		}
+	if _, err := c.compileExcludes(); err != nil {
+		return err
 	}
 	return nil
+}
+
+// compileExcludes compiles the ExcludeFiles patterns into regexps.
+// Returns nil when no patterns are configured. The first invalid pattern
+// produces an error and aborts compilation.
+func (c Config) compileExcludes() ([]*regexp.Regexp, error) {
+	if len(c.ExcludeFiles) == 0 {
+		return nil, nil
+	}
+	out := make([]*regexp.Regexp, 0, len(c.ExcludeFiles))
+	for _, pattern := range c.ExcludeFiles {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid exclude_files pattern %q: %w", pattern, err)
+		}
+		out = append(out, re)
+	}
+	return out, nil
 }

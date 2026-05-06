@@ -1,8 +1,12 @@
+// Package packages resolves Go import paths and module roots for files
+// inside a repository. Lookups are cached so callers can dedupe `go list`
+// invocations across the lifetime of a run.
 package packages
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +18,55 @@ import (
 type ModulePackage struct {
 	ImportPath string
 	ModuleRoot string // absolute path to go.mod directory
+}
+
+// ErrLookupFailed is returned by Lookup on cache hits where the original
+// resolution failed. Callers that ignore the error can branch on
+// ModulePackage.ImportPath == "" instead.
+var ErrLookupFailed = errors.New("packages: lookup previously failed")
+
+// Lookup returns the import path and module root for absDir. The cache map
+// is shared across calls — a directory whose import path has already been
+// resolved (or has previously failed to resolve) skips the `go list` shell-out.
+//
+// On first lookup, failures are negatively cached as a zero ModulePackage so
+// repeated calls do not re-invoke `go list`. Subsequent lookups for a
+// previously-failed directory return ErrLookupFailed.
+func Lookup(ctx context.Context, gitRoot, absDir string, cache map[string]ModulePackage) (ModulePackage, error) {
+	if cached, ok := cache[absDir]; ok {
+		if cached.ImportPath == "" {
+			return ModulePackage{}, ErrLookupFailed
+		}
+		return cached, nil
+	}
+
+	info, err := lookupUncached(ctx, gitRoot, absDir)
+	if err != nil {
+		cache[absDir] = ModulePackage{}
+		return ModulePackage{}, err
+	}
+	cache[absDir] = info
+	return info, nil
+}
+
+func lookupUncached(ctx context.Context, gitRoot, absDir string) (ModulePackage, error) {
+	modRoot, err := FindModRoot(absDir, gitRoot)
+	if err != nil {
+		return ModulePackage{}, err
+	}
+	relDir, err := filepath.Rel(modRoot, absDir)
+	if err != nil {
+		return ModulePackage{}, err
+	}
+	target := "./" + filepath.ToSlash(relDir)
+	importPath, err := goList(ctx, modRoot, target)
+	if err != nil {
+		return ModulePackage{}, err
+	}
+	if importPath == "" {
+		return ModulePackage{}, fmt.Errorf("go list returned empty import path for %s", absDir)
+	}
+	return ModulePackage{ImportPath: importPath, ModuleRoot: modRoot}, nil
 }
 
 // FindModRoot walks up from dir toward gitRoot looking for go.mod.
@@ -30,72 +83,10 @@ func FindModRoot(dir, gitRoot string) (string, error) {
 		}
 		cur = filepath.Dir(cur)
 	}
-	// Check gitRoot itself.
 	if _, err := os.Stat(filepath.Join(gitRoot, "go.mod")); err == nil {
 		return gitRoot, nil
 	}
 	return "", fmt.Errorf("no go.mod found between %s and %s", dir, gitRoot)
-}
-
-// Resolve maps a list of files (paths relative to gitRoot) to their Go import
-// paths. Files that cannot be resolved (no go.mod, go list failure) are
-// silently skipped.
-func Resolve(ctx context.Context, gitRoot string, files []string) ([]ModulePackage, error) {
-	gitRoot = filepath.Clean(gitRoot)
-	seen := make(map[string]struct{})
-	var result []ModulePackage
-
-	for _, file := range files {
-		if file == "" {
-			continue
-		}
-		absDir := filepath.Join(gitRoot, filepath.Dir(file))
-
-		modRoot, err := FindModRoot(absDir, gitRoot)
-		if err != nil {
-			continue // skip — no go.mod
-		}
-
-		relDir, err := filepath.Rel(modRoot, absDir)
-		if err != nil {
-			continue
-		}
-
-		target := "./" + filepath.ToSlash(relDir)
-
-		// Dedup by (modRoot, target) before shelling out.
-		key := modRoot + "::" + target
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-
-		importPath, err := goList(ctx, modRoot, target)
-		if err != nil || importPath == "" {
-			continue
-		}
-
-		result = append(result, ModulePackage{
-			ImportPath: importPath,
-			ModuleRoot: modRoot,
-		})
-	}
-	return result, nil
-}
-
-// ImportPath resolves the Go import path for a directory.
-// absDir must be an absolute path to the directory; gitRoot is the repo root.
-func ImportPath(ctx context.Context, absDir, gitRoot string) (string, error) {
-	modRoot, err := FindModRoot(absDir, gitRoot)
-	if err != nil {
-		return "", err
-	}
-	relDir, err := filepath.Rel(modRoot, absDir)
-	if err != nil {
-		return "", err
-	}
-	target := "./" + filepath.ToSlash(relDir)
-	return goList(ctx, modRoot, target)
 }
 
 // goList runs `go list <target>` in the given working directory and returns
