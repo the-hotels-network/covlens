@@ -2,6 +2,7 @@ package covlens_test
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,7 +31,9 @@ func TestRun_DiffCoverage(t *testing.T) {
 	cfg := covlens.DefaultConfig()
 	cfg.WorkDir = repo
 	cfg.AutoOpen = false
-	cfg.DiffThreshold = 40 // permissive — we expect ~50%
+	cfg.Stderr = io.Discard     // silence ▶ progress lines in test output
+	cfg.TestOutput = io.Discard // silence go test subprocess chatter
+	cfg.DiffThreshold = 40      // permissive — we expect ~50%
 	cfg.TotalThreshold = 40
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -84,6 +87,10 @@ func TestRun_DiffCoverage(t *testing.T) {
 	if len(report.SourceFiles) == 0 {
 		t.Error("SourceFiles empty — expected per-file source rendering for the HTML printer")
 	}
+	// Happy path: nothing should have failed silently.
+	if len(report.Warnings) != 0 {
+		t.Errorf("unexpected warnings on happy path: %v", report.Warnings)
+	}
 }
 
 // TestRun_NoChangedFiles exercises the early-exit branch in detectChangedFiles:
@@ -97,6 +104,8 @@ func TestRun_NoChangedFiles(t *testing.T) {
 	cfg := covlens.DefaultConfig()
 	cfg.WorkDir = repo
 	cfg.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -111,6 +120,9 @@ func TestRun_NoChangedFiles(t *testing.T) {
 	}
 	if len(report.Files) != 0 {
 		t.Errorf("expected 0 files for docs-only change, got %d: %+v", len(report.Files), report.Files)
+	}
+	if len(report.Warnings) != 0 {
+		t.Errorf("unexpected warnings on docs-only run: %v", report.Warnings)
 	}
 }
 
