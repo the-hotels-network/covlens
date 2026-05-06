@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	"golang.org/x/tools/cover"
@@ -88,7 +87,7 @@ var diffPipeline = []stage{
 	computeCoverage,
 	buildFileEntries,
 	assembleReport,
-	renderAndOpen,
+	finalizeReport,
 }
 
 // fileState tracks per-file metadata accumulated through the pipeline.
@@ -173,7 +172,7 @@ func detectChangedFiles(s *runState) error {
 	s.changedFiles = files
 
 	if len(files) == 0 {
-		s.report = &Report{DiffPassed: true, TotalPassed: true}
+		s.report = &Report{DiffPassed: true, TotalPassed: true, OutputDir: s.outputDir}
 		s.done = true
 	}
 	return nil
@@ -353,13 +352,15 @@ func assembleReport(s *runState) error {
 		DiffPassed:            s.diffCov >= s.cfg.DiffThreshold,
 		TotalPassed:           totalPassed,
 		Files:                 s.fileCoverages,
+		OutputDir:             s.outputDir,
 	}
 	return nil
 }
 
-func renderAndOpen(s *runState) error {
-	// Render source files for HTML report (diff view: only changed lines ± context).
-	var sourceFiles []html.SourceFile
+func finalizeReport(s *runState) error {
+	// Build per-file rendered source for the HTML printer (diff view: only
+	// changed lines ± context). Library users who don't want HTML can ignore
+	// Report.SourceFiles.
 	profileMap := make(map[string]*cover.Profile)
 	for _, p := range s.diffProfiles {
 		profileMap[p.FileName] = p
@@ -387,55 +388,16 @@ func renderAndOpen(s *runState) error {
 
 		rendered, err := html.RenderSource(absPath, blocks, rHunks)
 		if err != nil {
+			s.warnings = append(s.warnings, fmt.Sprintf("could not render source for %s: %v", fs.path, err))
 			continue
 		}
-		sourceFiles = append(sourceFiles, html.SourceFile{
+		s.report.SourceFiles = append(s.report.SourceFiles, html.SourceFile{
 			Path:       fs.path,
 			Package:    fs.pkg,
 			SourceHTML: rendered,
 			Coverage:   diffFileCov,
 			Status:     fileStatusFor(diffFileCov, s.cfg.DiffThreshold),
 		})
-	}
-
-	reportPath := filepath.Join(s.outputDir, "coverage_report.html")
-
-	var fileSummaries []html.FileSummary
-	for _, fc := range s.fileCoverages {
-		fileSummaries = append(fileSummaries, html.FileSummary{
-			Path:       fc.Path,
-			Package:    fc.Package,
-			Coverage:   fc.Coverage,
-			Statements: fc.Statements,
-			Covered:    fc.Covered,
-			Excluded:   fc.Excluded,
-			Status:     fc.Status,
-		})
-	}
-
-	reportInput := html.ReportInput{
-		DiffCoverage:          s.report.DiffCoverage,
-		TotalCoverage:         s.report.TotalCoverage,
-		BaselineTotalCoverage: s.report.BaselineTotalCoverage,
-		DiffPassed:            s.report.DiffPassed,
-		TotalPassed:           s.report.TotalPassed,
-		DiffThreshold:         s.cfg.DiffThreshold,
-		TotalThreshold:        s.cfg.TotalThreshold,
-		BaseBranch:            s.cfg.BaseBranch,
-		ShowExcluded:          s.cfg.ShowExcluded,
-		RatchetTotal:          s.cfg.RatchetTotal,
-		Theme:                 s.cfg.Theme,
-		Files:                 fileSummaries,
-	}
-
-	if err := html.Generate(reportInput, sourceFiles, reportPath); err != nil {
-		s.warnings = append(s.warnings, fmt.Sprintf("failed to generate HTML report: %v", err))
-	} else {
-		s.report.ReportPath = reportPath
-	}
-
-	if s.cfg.AutoOpen && s.report.ReportPath != "" {
-		openBrowser(s.report.ReportPath)
 	}
 
 	s.report.Warnings = s.warnings
@@ -473,7 +435,6 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 
 	var fileCoverages []FileCoverage
 	var sourceFiles []html.SourceFile
-	var fileSummaries []html.FileSummary
 
 	for _, p := range totalProfiles {
 		absPath := resolveAbsPath(p.FileName, modPathMap)
@@ -504,18 +465,11 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 			Covered:    covered,
 			Status:     status,
 		})
-		fileSummaries = append(fileSummaries, html.FileSummary{
-			Path:       relPath,
-			Package:    pkg,
-			Coverage:   cov,
-			Statements: stmts,
-			Covered:    covered,
-			Status:     status,
-		})
 
 		// nil hunks → RenderSource shows the full file
 		rendered, err := html.RenderSource(absPath, p.Blocks, nil)
 		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("could not render source for %s: %v", relPath, err))
 			continue
 		}
 		sourceFiles = append(sourceFiles, html.SourceFile{
@@ -532,30 +486,10 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 		TotalPassed:   totalCov >= cfg.TotalThreshold,
 		DiffPassed:    true,
 		Files:         fileCoverages,
+		SourceFiles:   sourceFiles,
+		OutputDir:     outputDir,
+		Warnings:      warnings,
 	}
-
-	reportPath := filepath.Join(outputDir, "coverage_report.html")
-	reportInput := html.ReportInput{
-		TotalCoverage:  r.TotalCoverage,
-		TotalPassed:    r.TotalPassed,
-		DiffPassed:     true,
-		TotalThreshold: cfg.TotalThreshold,
-		BaseBranch:     cfg.BaseBranch,
-		ShowExcluded:   cfg.ShowExcluded,
-		Theme:          cfg.Theme,
-		FullMode:       true,
-		Files:          fileSummaries,
-	}
-	if err := html.Generate(reportInput, sourceFiles, reportPath); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to generate HTML report: %v", err))
-	} else {
-		r.ReportPath = reportPath
-	}
-
-	if cfg.AutoOpen && r.ReportPath != "" {
-		openBrowser(r.ReportPath)
-	}
-	r.Warnings = warnings
 	return r, nil
 }
 
@@ -655,20 +589,6 @@ func fileStatusFor(cov, threshold float64) string {
 		return "ok"
 	}
 	return "fail"
-}
-
-func openBrowser(path string) {
-	url := "file://" + path
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	default:
-		return
-	}
-	_ = cmd.Start() // fire-and-forget: browser launch failure is non-fatal
 }
 
 func logProgress(w io.Writer, msg string) {

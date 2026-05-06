@@ -1,5 +1,7 @@
 package covlens
 
+import "github.com/erioch/covlens/printers/html"
+
 // Report holds the results of a coverage analysis run.
 type Report struct {
 	DiffCoverage          float64
@@ -8,7 +10,14 @@ type Report struct {
 	DiffPassed            bool
 	TotalPassed           bool
 	Files                 []FileCoverage
-	ReportPath            string
+	// OutputDir is the absolute path to the directory where coverage
+	// profiles were written. Printers (e.g. the HTML renderer) typically
+	// write their output here.
+	OutputDir string
+	// SourceFiles holds per-file syntax-highlighted source with coverage
+	// overlay, ready to be consumed by the HTML printer. Library users
+	// who only want numeric coverage can ignore this field.
+	SourceFiles []html.SourceFile
 	// Warnings collects non-fatal issues observed during the run that
 	// callers may want to surface (e.g. a corrupt coverage profile, a
 	// per-file diff hunk failure). Fatal failures are returned as errors.

@@ -78,10 +78,11 @@ func TestRun_DiffCoverage(t *testing.T) {
 			cfg.TotalThreshold, report.TotalCoverage)
 	}
 
-	if report.ReportPath == "" {
-		t.Error("ReportPath empty — expected an HTML report to be generated")
-	} else if _, err := os.Stat(report.ReportPath); err != nil {
-		t.Errorf("HTML report missing at %q: %v", report.ReportPath, err)
+	if report.OutputDir == "" {
+		t.Error("OutputDir empty — expected the resolved output directory to be set")
+	}
+	if len(report.SourceFiles) == 0 {
+		t.Error("SourceFiles empty — expected per-file source rendering for the HTML printer")
 	}
 }
 
