@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/cover"
@@ -534,11 +535,21 @@ func buildModulePathMap(ctx context.Context, roots []string) (map[string]string,
 
 // resolveAbsPath converts a coverage profile key (e.g. "github.com/x/y/pkg/file.go")
 // to an absolute filesystem path using the module path map.
+//
+// In monorepos with nested modules (e.g. example.com/lib and
+// example.com/lib/internal), the longer module path must win — otherwise
+// resolution depends on map iteration order and is non-deterministic.
 func resolveAbsPath(profileKey string, modPathMap map[string]string) string {
-	for modPath, modRoot := range modPathMap {
+	paths := make([]string, 0, len(modPathMap))
+	for p := range modPathMap {
+		paths = append(paths, p)
+	}
+	sort.Slice(paths, func(i, j int) bool { return len(paths[i]) > len(paths[j]) })
+
+	for _, modPath := range paths {
 		if strings.HasPrefix(profileKey, modPath+"/") {
 			rel := profileKey[len(modPath)+1:]
-			return filepath.Join(modRoot, filepath.FromSlash(rel))
+			return filepath.Join(modPathMap[modPath], filepath.FromSlash(rel))
 		}
 	}
 	return ""
