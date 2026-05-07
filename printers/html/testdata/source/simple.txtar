@@ -1,0 +1,28 @@
+Two single-line functions: Add is covered, Mul is not.
+Exercises hit/miss line annotation in full-file mode.
+
+-- source.go --
+package foo
+
+func Add(a, b int) int {
+	return a + b
+}
+
+func Mul(a, b int) int {
+	return a * b
+}
+-- blocks.txt --
+# StartLine StartCol EndLine EndCol NumStmt Count
+3 24 5 2 1 1
+7 24 9 2 1 0
+-- output.golden.html --
+<pre class="chroma"><code><span class="line"><span class="ln">1</span><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nx">foo</span><span class="w">
+</span></span></span><span class="line"><span class="ln">2</span><span class="cl"><span class="w">
+</span></span></span><span class="line covered"><span class="ln">3</span><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">Add</span><span class="p">(</span><span class="nx">a</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln">4</span><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">b</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln">5</span><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="ln">6</span><span class="cl"><span class="w">
+</span></span></span><span class="line uncovered"><span class="ln">7</span><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">Mul</span><span class="p">(</span><span class="nx">a</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line uncovered"><span class="ln">8</span><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">b</span><span class="w">
+</span></span></span><span class="line uncovered"><span class="ln">9</span><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre>

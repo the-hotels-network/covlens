@@ -1,0 +1,32 @@
+Single statement spanning multiple physical lines (fmt.Sprintf with line-broken args).
+A single ProfileBlock covers the whole range; every physical line should
+be annotated as covered, including the args that aren't statements.
+
+-- source.go --
+package foo
+
+import "fmt"
+
+func Format(name string, age int) string {
+	return fmt.Sprintf(
+		"name=%s age=%d",
+		name,
+		age,
+	)
+}
+-- blocks.txt --
+# StartLine StartCol EndLine EndCol NumStmt Count
+5 41 11 2 1 1
+-- output.golden.html --
+<pre class="chroma"><code><span class="line"><span class="ln"> 1</span><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nx">foo</span><span class="w">
+</span></span></span><span class="line"><span class="ln"> 2</span><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="ln"> 3</span><span class="cl"><span class="kn">import</span><span class="w"> </span><span class="s">&#34;fmt&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="ln"> 4</span><span class="cl"><span class="w">
+</span></span></span><span class="line covered"><span class="ln"> 5</span><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">Format</span><span class="p">(</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">age</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln"> 6</span><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">fmt</span><span class="p">.</span><span class="nf">Sprintf</span><span class="p">(</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln"> 7</span><span class="cl"><span class="w">		</span><span class="s">&#34;name=%s age=%d&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln"> 8</span><span class="cl"><span class="w">		</span><span class="nx">name</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln"> 9</span><span class="cl"><span class="w">		</span><span class="nx">age</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln">10</span><span class="cl"><span class="w">	</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line covered"><span class="ln">11</span><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre>
