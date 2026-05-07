@@ -12,6 +12,7 @@ import (
 	"github.com/erioch/covlens"
 	"github.com/erioch/covlens/printers/console"
 	"github.com/erioch/covlens/printers/html"
+	"github.com/erioch/covlens/printers/json"
 )
 
 func main() {
@@ -62,6 +63,23 @@ func main() {
 
 	console.PrintWarnings(os.Stderr, report)
 
+	// HTML first — its path is referenced from the JSON sidecar.
+	htmlPath := ""
+	if !*noHTML && len(report.Files) > 0 {
+		p, err := writeHTMLReport(report, cfg)
+		if err != nil {
+			console.Error(os.Stderr, "failed to generate HTML report: %v", err)
+		} else {
+			htmlPath = p
+		}
+	}
+
+	// JSON sidecar for CI consumers — always written so a parser can rely
+	// on the file existing whenever covlens completed successfully.
+	if _, err := writeJSONReport(report, cfg, htmlPath); err != nil {
+		console.Error(os.Stderr, "failed to generate JSON report: %v", err)
+	}
+
 	if len(report.Files) == 0 {
 		console.Info(os.Stdout, "No changed Go files detected relative to '"+cfg.BaseBranch+"'.")
 		return
@@ -69,15 +87,10 @@ func main() {
 
 	console.PrintSummary(os.Stdout, report, cfg)
 
-	if !*noHTML {
-		htmlPath, err := writeHTMLReport(report, cfg)
-		if err != nil {
-			console.Error(os.Stderr, "failed to generate HTML report: %v", err)
-		} else {
-			console.Info(os.Stdout, "Report: "+htmlPath)
-			if cfg.AutoOpen {
-				openBrowser(htmlPath)
-			}
+	if htmlPath != "" {
+		console.Info(os.Stdout, "Report: "+htmlPath)
+		if cfg.AutoOpen {
+			openBrowser(htmlPath)
 		}
 	}
 
@@ -123,6 +136,57 @@ func writeHTMLReport(r *covlens.Report, cfg covlens.Config) (string, error) {
 	}
 
 	if err := html.Generate(input, r.SourceFiles, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// writeJSONReport renders the machine-readable JSON sidecar and returns its path.
+func writeJSONReport(r *covlens.Report, cfg covlens.Config, htmlPath string) (string, error) {
+	path := filepath.Join(r.OutputDir, "coverage_report.json")
+
+	files := make([]json.File, 0, len(r.Files))
+	for _, fc := range r.Files {
+		files = append(files, json.File{
+			Path:       fc.Path,
+			Package:    fc.Package,
+			Coverage:   fc.Coverage,
+			Statements: fc.Statements,
+			Covered:    fc.Covered,
+			Excluded:   fc.Excluded,
+			Status:     fc.Status,
+		})
+	}
+
+	mode := "diff"
+	if cfg.FullMode {
+		mode = "full"
+	}
+
+	out := json.Report{
+		Schema:                json.SchemaVersion,
+		Mode:                  mode,
+		BaseBranch:            cfg.BaseBranch,
+		DiffCoverage:          r.DiffCoverage,
+		TotalCoverage:         r.TotalCoverage,
+		BaselineTotalCoverage: r.BaselineTotalCoverage,
+		DiffThreshold:         cfg.DiffThreshold,
+		TotalThreshold:        cfg.TotalThreshold,
+		RatchetTotal:          cfg.RatchetTotal,
+		DiffPassed:            r.DiffPassed,
+		TotalPassed:           r.TotalPassed,
+		HTMLReportPath:        htmlPath,
+		Files:                 files,
+		Warnings:              r.Warnings,
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	if err := json.Encode(f, out); err != nil {
 		return "", err
 	}
 	return path, nil
