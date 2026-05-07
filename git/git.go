@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -102,14 +103,22 @@ func (c *Client) ChangedFiles(ctx context.Context, mergeBase string) ([]string, 
 }
 
 // IsTracked returns whether the given path is tracked by git.
+//
+// `git ls-files --error-unmatch` exits with status 1 when the path is genuinely
+// untracked, and with status 128 (or fails to start) when something is actually
+// broken — corrupt index, not a git repository, missing binary. Conflating the
+// two would silently exclude files from coverage, so we only treat exit 1 as
+// "untracked" and propagate every other failure.
 func (c *Client) IsTracked(ctx context.Context, path string) (bool, error) {
 	_, err := c.run(ctx, "ls-files", "--error-unmatch", path)
-	if err != nil {
-		// If the command failed, the file is untracked (or some other error).
-		// We treat any error as "not tracked".
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 		return false, nil
 	}
-	return true, nil
+	return false, err
 }
 
 // AddWorktree creates a detached git worktree at dir checked out to the given commit.
