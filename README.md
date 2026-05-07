@@ -9,6 +9,7 @@ Go coverage tool that runs tests only on packages you changed and validates thre
 3. Computes coverage for **the changed lines only** (not the whole file)
 4. Validates two thresholds and exits 1 if either fails — CI-friendly
 5. Generates a self-contained HTML report with syntax highlighting, a file sidebar, dark mode, and jump-to-uncovered
+6. Writes a machine-readable `coverage_report.json` sidecar so CI tooling can parse the result without scraping the HTML or stderr
 
 ## Install
 
@@ -16,7 +17,8 @@ Go coverage tool that runs tests only on packages you changed and validates thre
 go install github.com/erioch/covlens/cmd/covlens@latest
 ```
 
-Requires Go 1.21+, `git`, and `go` on your PATH.
+Requires Go 1.25+, `git`, and `go` on your PATH. (Go's auto-toolchain feature means
+`go install` from an older Go version will automatically download the 1.25 toolchain.)
 
 ## Usage
 
@@ -44,8 +46,11 @@ covlens --config path/to/covlens.yaml
 | `--base-branch` | `main` | Branch to diff against |
 | `--diff-threshold` | `80` | Minimum coverage % for changed lines |
 | `--total-threshold` | `70` | Minimum coverage % for the whole project |
-| `--output-dir` | `.coverage` | Directory for profiles and the HTML report |
+| `--output-dir` | `.coverage` | Directory for profiles, HTML report, and JSON sidecar |
 | `--no-open` | false | Skip auto-opening the report in the browser |
+| `--no-html` | false | Skip HTML generation entirely (implies `--no-open`); JSON sidecar is still written |
+| `--ratchet` | false | Replace `--total-threshold` with a "must not drop vs. base branch" check |
+| `--full` | false | Skip the diff and report coverage for every file in the project |
 | `--config` | `covlens.yaml` | Path to config file |
 
 ## Configuration
@@ -94,12 +99,19 @@ func main() {
 ## Use as a library
 
 ```go
-import "github.com/erioch/covlens"
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/erioch/covlens"
+)
 
 cfg := covlens.DefaultConfig()
+cfg.WorkDir = "."          // path to the git repo to analyze
 cfg.DiffThreshold = 90
 
-report, err := covlens.Run(cfg)
+report, err := covlens.Run(context.Background(), cfg)
 if err != nil {
     log.Fatal(err)
 }
