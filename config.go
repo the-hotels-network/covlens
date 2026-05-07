@@ -15,17 +15,18 @@ type Config struct {
 	DiffThreshold  float64  `yaml:"diff_threshold"`
 	TotalThreshold float64  `yaml:"total_threshold"`
 	OutputDir      string   `yaml:"output_dir"`
-	AutoOpen       bool     `yaml:"auto_open"`
 	ExcludeFiles   []string `yaml:"exclude_files"`
-	ShowExcluded   bool     `yaml:"show_excluded"`
 	// RatchetTotal fails only if total coverage drops below the base branch value,
 	// rather than comparing against the fixed TotalThreshold.
 	RatchetTotal bool `yaml:"ratchet_total"`
-	// Theme sets the default theme for the HTML report: "auto", "light", or "dark".
-	// "auto" follows the OS preference. Users can always override via the in-page toggle.
-	Theme    string `yaml:"theme"`
+
 	FullMode bool   `yaml:"-"` // set by --full CLI flag, not persisted to config
 	WorkDir  string `yaml:"-"`
+
+	// HTML groups settings that only matter when consuming the HTML report.
+	// Inlined into the YAML schema so existing covlens.yaml files keep working
+	// (auto_open / show_excluded / theme stay at the top level).
+	HTML HTMLConfig `yaml:",inline"`
 
 	// Stderr receives covlens progress lines (e.g. "▶ Running total coverage...").
 	// Defaults to os.Stderr. Set to io.Discard to silence.
@@ -33,6 +34,16 @@ type Config struct {
 	// TestOutput receives the streamed stdout/stderr of the `go test` subprocess.
 	// Defaults to os.Stdout. Set to io.Discard to silence.
 	TestOutput io.Writer `yaml:"-"`
+}
+
+// HTMLConfig holds presentation-only settings used by the HTML printer.
+// Library users who never render HTML can leave the zero value.
+type HTMLConfig struct {
+	AutoOpen     bool `yaml:"auto_open"`
+	ShowExcluded bool `yaml:"show_excluded"`
+	// Theme sets the default theme for the HTML report: "auto", "light", or "dark".
+	// "auto" follows the OS preference. Users can always override via the in-page toggle.
+	Theme string `yaml:"theme"`
 }
 
 func (c Config) stderr() io.Writer {
@@ -56,9 +67,11 @@ func DefaultConfig() Config {
 		DiffThreshold:  80,
 		TotalThreshold: 70,
 		OutputDir:      ".coverage",
-		AutoOpen:       true,
-		ShowExcluded:   true,
-		Theme:          "auto",
+		HTML: HTMLConfig{
+			AutoOpen:     true,
+			ShowExcluded: true,
+			Theme:        "auto",
+		},
 	}
 }
 
@@ -87,8 +100,8 @@ func (c Config) Validate() error {
 	if c.TotalThreshold < 0 || c.TotalThreshold > 100 {
 		return fmt.Errorf("total_threshold must be between 0 and 100, got %.1f", c.TotalThreshold)
 	}
-	if c.Theme != "" && c.Theme != "auto" && c.Theme != "light" && c.Theme != "dark" {
-		return fmt.Errorf("theme must be \"auto\", \"light\", or \"dark\", got %q", c.Theme)
+	if c.HTML.Theme != "" && c.HTML.Theme != "auto" && c.HTML.Theme != "light" && c.HTML.Theme != "dark" {
+		return fmt.Errorf("theme must be \"auto\", \"light\", or \"dark\", got %q", c.HTML.Theme)
 	}
 	if _, err := c.compileExcludes(); err != nil {
 		return err

@@ -47,7 +47,7 @@ func main() {
 		case "output-dir":
 			cfg.OutputDir = *outputDir
 		case "no-open":
-			cfg.AutoOpen = !*noOpen
+			cfg.HTML.AutoOpen = !*noOpen
 		case "ratchet":
 			cfg.RatchetTotal = *ratchet
 		case "full":
@@ -89,7 +89,7 @@ func main() {
 
 	if htmlPath != "" {
 		console.Info(os.Stdout, "Report: "+htmlPath)
-		if cfg.AutoOpen {
+		if cfg.HTML.AutoOpen {
 			openBrowser(htmlPath)
 		}
 	}
@@ -128,9 +128,9 @@ func writeHTMLReport(r *covlens.Report, cfg covlens.Config) (string, error) {
 		DiffThreshold:         cfg.DiffThreshold,
 		TotalThreshold:        cfg.TotalThreshold,
 		BaseBranch:            cfg.BaseBranch,
-		ShowExcluded:          cfg.ShowExcluded,
+		ShowExcluded:          cfg.HTML.ShowExcluded,
 		RatchetTotal:          cfg.RatchetTotal,
-		Theme:                 cfg.Theme,
+		Theme:                 cfg.HTML.Theme,
 		FullMode:              cfg.FullMode,
 		Files:                 files,
 	}

@@ -27,7 +27,7 @@ func TestRun_DiffCoverage(t *testing.T) {
 
 	cfg := covlens.DefaultConfig()
 	cfg.WorkDir = repo
-	cfg.AutoOpen = false
+	cfg.HTML.AutoOpen = false
 	cfg.Stderr = io.Discard     // silence ▶ progress lines in test output
 	cfg.TestOutput = io.Discard // silence go test subprocess chatter
 	cfg.DiffThreshold = 40      // permissive — we expect ~50%
@@ -100,7 +100,7 @@ func TestRun_NoChangedFiles(t *testing.T) {
 
 	cfg := covlens.DefaultConfig()
 	cfg.WorkDir = repo
-	cfg.AutoOpen = false
+	cfg.HTML.AutoOpen = false
 	cfg.Stderr = io.Discard
 	cfg.TestOutput = io.Discard
 
@@ -139,7 +139,7 @@ func TestRun_FullMode_HonorsExclusions(t *testing.T) {
 
 	cfg := covlens.DefaultConfig()
 	cfg.WorkDir = repo
-	cfg.AutoOpen = false
+	cfg.HTML.AutoOpen = false
 	cfg.Stderr = io.Discard
 	cfg.TestOutput = io.Discard
 	cfg.FullMode = true
