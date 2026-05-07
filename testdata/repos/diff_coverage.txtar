@@ -1,0 +1,48 @@
+Two-branch repo: main has Add+TestAdd; feature adds Sub (covered) and Mul (uncovered).
+Diff coverage on foo.go is therefore ~50% (1 of 2 added stmts covered).
+
+Files prefixed `base/` are committed on `main`; files prefixed `head/` are
+committed on `feature` after a `git checkout -b feature`.
+
+-- base/go.mod --
+module example.com/testrepo
+
+go 1.21
+-- base/foo.go --
+package foo
+
+func Add(a, b int) int { return a + b }
+-- base/foo_test.go --
+package foo
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if Add(2, 3) != 5 {
+		t.Fail()
+	}
+}
+-- head/foo.go --
+package foo
+
+func Add(a, b int) int { return a + b }
+
+func Sub(a, b int) int { return a - b }
+
+func Mul(a, b int) int { return a * b }
+-- head/foo_test.go --
+package foo
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if Add(2, 3) != 5 {
+		t.Fail()
+	}
+}
+
+func TestSub(t *testing.T) {
+	if Sub(5, 3) != 2 {
+		t.Fail()
+	}
+}

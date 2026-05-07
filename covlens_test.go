@@ -10,23 +10,20 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/tools/txtar"
+
 	"github.com/erioch/covlens"
 )
 
-// TestRun_DiffCoverage builds a real git repo in t.TempDir() with main → feature
-// branches and known coverage characteristics, then asserts that covlens.Run
+// TestRun_DiffCoverage builds a real git repo from a txtar fixture (main →
+// feature with known coverage characteristics) and asserts that covlens.Run
 // computes the expected per-file and aggregate numbers end-to-end.
 //
-// Layout:
-//
-//	main:    foo.go has Add (fully covered by foo_test.go).
-//	feature: foo.go adds Sub (covered) and Mul (uncovered).
-//
-// Diff coverage on foo.go must therefore land at ~50% (1 of 2 added stmts covered).
+// Diff coverage on foo.go is ~50% (1 of 2 added stmts covered).
 func TestRun_DiffCoverage(t *testing.T) {
 	requireExecutables(t, "git", "go")
 
-	repo := setupTestRepo(t)
+	repo := setupTxtarRepo(t, "testdata/repos/diff_coverage.txtar")
 
 	cfg := covlens.DefaultConfig()
 	cfg.WorkDir = repo
@@ -99,7 +96,7 @@ func TestRun_DiffCoverage(t *testing.T) {
 func TestRun_NoChangedFiles(t *testing.T) {
 	requireExecutables(t, "git", "go")
 
-	repo := setupRepoWithDocsOnlyChange(t)
+	repo := setupTxtarRepo(t, "testdata/repos/no_changed_files.txtar")
 
 	cfg := covlens.DefaultConfig()
 	cfg.WorkDir = repo
@@ -135,103 +132,58 @@ func requireExecutables(t *testing.T, names ...string) {
 	}
 }
 
-// setupTestRepo creates a self-contained git repo: main with Add+test, feature
-// with Add+Sub (covered) + Mul (uncovered). Returns the absolute repo path,
-// checked out at feature.
-func setupTestRepo(t *testing.T) string {
+// setupTxtarRepo materializes a git repo from a txtar fixture. Files prefixed
+// `base/` are committed on `main`; files prefixed `head/` are committed on a
+// `feature` branch checked out from main. Other prefixes are rejected so a
+// typo can't silently produce an empty commit.
+//
+// Returns the absolute repo path, checked out at `feature`.
+func setupTxtarRepo(t *testing.T, fixturePath string) string {
 	t.Helper()
+
+	ar, err := txtar.ParseFile(fixturePath)
+	if err != nil {
+		t.Fatalf("parse %s: %v", fixturePath, err)
+	}
+
+	var baseFiles, headFiles []txtar.File
+	for _, f := range ar.Files {
+		switch {
+		case strings.HasPrefix(f.Name, "base/"):
+			f.Name = strings.TrimPrefix(f.Name, "base/")
+			baseFiles = append(baseFiles, f)
+		case strings.HasPrefix(f.Name, "head/"):
+			f.Name = strings.TrimPrefix(f.Name, "head/")
+			headFiles = append(headFiles, f)
+		default:
+			t.Fatalf("%s: file %q lacks required base/ or head/ prefix", fixturePath, f.Name)
+		}
+	}
+
+	if len(baseFiles) == 0 {
+		t.Fatalf("%s: no base/ files — at least one is required for the initial commit", fixturePath)
+	}
+
 	dir := t.TempDir()
 	gitEnv := isolatedGitEnv()
-
 	runGit := gitRunner(t, dir, gitEnv)
 	write := fileWriter(t, dir)
 
 	runGit("init", "-b", "main")
-
-	write("go.mod", "module example.com/testrepo\n\ngo 1.21\n")
-	write("foo.go", `package foo
-
-func Add(a, b int) int { return a + b }
-`)
-	write("foo_test.go", `package foo
-
-import "testing"
-
-func TestAdd(t *testing.T) {
-	if Add(2, 3) != 5 {
-		t.Fail()
+	for _, f := range baseFiles {
+		write(f.Name, string(f.Data))
 	}
-}
-`)
 	runGit("add", ".")
-	runGit("commit", "-m", "initial")
+	runGit("commit", "-m", "base")
 
 	runGit("checkout", "-b", "feature")
-
-	write("foo.go", `package foo
-
-func Add(a, b int) int { return a + b }
-
-func Sub(a, b int) int { return a - b }
-
-func Mul(a, b int) int { return a * b }
-`)
-	write("foo_test.go", `package foo
-
-import "testing"
-
-func TestAdd(t *testing.T) {
-	if Add(2, 3) != 5 {
-		t.Fail()
+	if len(headFiles) > 0 {
+		for _, f := range headFiles {
+			write(f.Name, string(f.Data))
+		}
+		runGit("add", ".")
+		runGit("commit", "-m", "head")
 	}
-}
-
-func TestSub(t *testing.T) {
-	if Sub(5, 3) != 2 {
-		t.Fail()
-	}
-}
-`)
-	runGit("add", ".")
-	runGit("commit", "-m", "add Sub and Mul")
-
-	return dir
-}
-
-// setupRepoWithDocsOnlyChange creates a repo whose feature branch differs from
-// main only in a non-.go file — covlens.Run should report no changed files.
-func setupRepoWithDocsOnlyChange(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	gitEnv := isolatedGitEnv()
-
-	runGit := gitRunner(t, dir, gitEnv)
-	write := fileWriter(t, dir)
-
-	runGit("init", "-b", "main")
-
-	write("go.mod", "module example.com/testrepo\n\ngo 1.21\n")
-	write("foo.go", `package foo
-
-func Add(a, b int) int { return a + b }
-`)
-	write("foo_test.go", `package foo
-
-import "testing"
-
-func TestAdd(t *testing.T) {
-	if Add(1, 2) != 3 {
-		t.Fail()
-	}
-}
-`)
-	runGit("add", ".")
-	runGit("commit", "-m", "initial")
-
-	runGit("checkout", "-b", "feature")
-	write("README.md", "# docs only change\n")
-	runGit("add", ".")
-	runGit("commit", "-m", "docs")
 
 	return dir
 }

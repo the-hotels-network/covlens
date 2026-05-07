@@ -1,0 +1,23 @@
+Two-branch repo where feature differs from main only in a non-.go file.
+covlens.Run must report zero changed files and skip `go test` entirely.
+
+-- base/go.mod --
+module example.com/testrepo
+
+go 1.21
+-- base/foo.go --
+package foo
+
+func Add(a, b int) int { return a + b }
+-- base/foo_test.go --
+package foo
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if Add(1, 2) != 3 {
+		t.Fail()
+	}
+}
+-- head/README.md --
+# docs only change
