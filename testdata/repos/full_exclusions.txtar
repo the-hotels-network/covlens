@@ -1,0 +1,56 @@
+Full-mode coverage repo exercising all three exclusion shapes:
+  1. ExcludeFiles regex (mocks_*.go and *_gen.go)
+  2. //covlens:ignore on whole file (skipme.go)
+  3. //covlens:ignore on a single function (partial.go)
+
+Tests in foo_test.go exercise the non-ignored functions. Pre-fix, full
+mode reported all five files unconditionally; post-fix, the three
+excluded files are marked Excluded=true and partial.go's coverage
+reflects only Counted() (the ignored function is subtracted from
+the per-file stmt count).
+
+-- base/go.mod --
+module example.com/test
+
+go 1.21
+-- base/foo.go --
+package foo
+
+func A() int { return 1 }
+-- base/mocks_foo.go --
+package foo
+
+func MockA() int { return 0 }
+-- base/foo_gen.go --
+package foo
+
+func GenA() int { return 0 }
+-- base/skipme.go --
+//covlens:ignore
+
+package foo
+
+func Skip() int { return 0 }
+-- base/partial.go --
+package foo
+
+func Counted() int { return 1 }
+
+//covlens:ignore
+func IgnoredFunc() int { return 0 }
+-- base/foo_test.go --
+package foo
+
+import "testing"
+
+func TestA(t *testing.T) {
+	if A() != 1 {
+		t.Fail()
+	}
+}
+
+func TestPartial(t *testing.T) {
+	if Counted() != 1 {
+		t.Fail()
+	}
+}

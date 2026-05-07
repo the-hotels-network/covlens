@@ -47,13 +47,13 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 		return nil, fmt.Errorf("creating output directory: %w", err)
 	}
 
-	if cfg.FullMode {
-		return runFull(ctx, cfg, outputDir)
-	}
-
 	excludeRes, err := cfg.compileExcludes()
 	if err != nil {
 		return nil, fmt.Errorf("compiling exclude patterns: %w", err)
+	}
+
+	if cfg.FullMode {
+		return runFull(ctx, cfg, outputDir, excludeRes)
 	}
 
 	s := &runState{
@@ -182,13 +182,11 @@ func detectChangedFiles(s *runState) error {
 func classifyFiles(s *runState) error {
 	for _, f := range s.changedFiles {
 		fs := fileState{path: f}
+		absPath := filepath.Join(s.gitRoot, f)
 
-		for _, re := range s.excludeRes {
-			if re.MatchString(f) {
-				fs.excluded = true
-				break
-			}
-		}
+		excl := classifyExclusion(f, absPath, s.excludeRes)
+		fs.excluded = excl.excluded
+		fs.funcExcluded = excl.funcExcluded
 
 		absDir := filepath.Join(s.gitRoot, filepath.Dir(f))
 		if info, err := packages.Lookup(s.ctx, s.gitRoot, absDir, s.pkgCache); err == nil {
@@ -197,21 +195,40 @@ func classifyFiles(s *runState) error {
 			fs.modRoot = info.ModuleRoot
 		}
 
-		if !fs.excluded {
-			absPath := filepath.Join(s.gitRoot, f)
-			if excl, err := directive.Parse(absPath); err == nil {
-				if excl.WholeFile {
-					fs.excluded = true
-				} else {
-					fs.funcExcluded = excl.Functions
-				}
-			}
-			// parse failure → skip directives, continue
-		}
-
 		s.allFiles = append(s.allFiles, fs)
 	}
 	return nil
+}
+
+// exclusion captures the per-file decision shared by diff and full modes.
+type exclusion struct {
+	excluded     bool
+	funcExcluded []directive.FuncSpan
+}
+
+// classifyExclusion applies the same exclusion logic that diff mode runs in
+// classifyFiles, so full mode can honor ExcludeFiles regexes and
+// //covlens:ignore directives identically.
+//
+// relPath is matched against the user's exclude regexes; absPath is the
+// filesystem path passed to directive.Parse.
+func classifyExclusion(relPath, absPath string, excludeRes []*regexp.Regexp) exclusion {
+	var e exclusion
+	for _, re := range excludeRes {
+		if re.MatchString(relPath) {
+			e.excluded = true
+			return e
+		}
+	}
+	if excl, err := directive.Parse(absPath); err == nil {
+		if excl.WholeFile {
+			e.excluded = true
+		} else {
+			e.funcExcluded = excl.Functions
+		}
+	}
+	// parse failure → no directive-based exclusions, continue
+	return e
 }
 
 func resolvePackages(s *runState) error {
@@ -407,7 +424,7 @@ func finalizeReport(s *runState) error {
 
 // runFull runs a full-project coverage scan without requiring any git diff.
 // Every instrumented file is listed in the report with complete source view.
-func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error) {
+func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*regexp.Regexp) (*Report, error) {
 	moduleRoots, err := findAllModuleRoots(cfg.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("finding module roots: %w", err)
@@ -445,8 +462,28 @@ func runFull(ctx context.Context, cfg Config, outputDir string) (*Report, error)
 		relPath, _ := filepath.Rel(cfg.WorkDir, absPath) // both paths are absolute; error only on Windows volume mismatch
 		pkg := filepath.ToSlash(filepath.Dir(p.FileName))
 
+		excl := classifyExclusion(relPath, absPath, excludeRes)
+		if excl.excluded {
+			fileCoverages = append(fileCoverages, FileCoverage{
+				Path:     relPath,
+				Package:  pkg,
+				Coverage: -1,
+				Excluded: true,
+				Status:   "excluded",
+			})
+			continue
+		}
+
+		var excludedRanges []git.Hunk
+		for _, fn := range excl.funcExcluded {
+			excludedRanges = append(excludedRanges, git.Hunk{Start: fn.StartLine, End: fn.EndLine})
+		}
+
 		var stmts, covered int
 		for _, b := range p.Blocks {
+			if len(excludedRanges) > 0 && git.InRange(excludedRanges, b.StartLine, b.EndLine) {
+				continue
+			}
 			stmts += b.NumStmt
 			if b.Count > 0 {
 				covered += b.NumStmt

@@ -123,6 +123,95 @@ func TestRun_NoChangedFiles(t *testing.T) {
 	}
 }
 
+// TestRun_FullMode_HonorsExclusions verifies that --full mode applies the
+// same exclusion rules as diff mode: ExcludeFiles regexes mark files as
+// excluded, //covlens:ignore on a whole file does the same, and
+// //covlens:ignore on a single function subtracts that function's blocks
+// from the file's coverage numbers.
+//
+// Pre-fix, runFull ignored all three signals and reported every file with
+// raw coverage — making the same config produce different answers in diff
+// vs full mode.
+func TestRun_FullMode_HonorsExclusions(t *testing.T) {
+	requireExecutables(t, "git", "go")
+
+	repo := setupTxtarRepo(t, "testdata/repos/full_exclusions.txtar")
+
+	cfg := covlens.DefaultConfig()
+	cfg.WorkDir = repo
+	cfg.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
+	cfg.FullMode = true
+	cfg.ExcludeFiles = []string{`^mocks_.*\.go$`, `_gen\.go$`}
+	cfg.TotalThreshold = 0 // we're testing exclusion plumbing, not thresholds
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	report, err := covlens.Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if report == nil {
+		t.Fatal("Run returned nil report")
+	}
+
+	byPath := make(map[string]covlens.FileCoverage)
+	for _, fc := range report.Files {
+		byPath[fc.Path] = fc
+	}
+
+	for _, name := range []string{"mocks_foo.go", "foo_gen.go", "skipme.go"} {
+		fc, ok := byPath[name]
+		if !ok {
+			t.Errorf("%s missing from report.Files; got %v", name, keysOf(byPath))
+			continue
+		}
+		if !fc.Excluded {
+			t.Errorf("%s: Excluded = false, want true", name)
+		}
+		if fc.Status != "excluded" {
+			t.Errorf("%s: Status = %q, want %q", name, fc.Status, "excluded")
+		}
+	}
+
+	// partial.go has two functions; only Counted() should count.
+	partial, ok := byPath["partial.go"]
+	if !ok {
+		t.Fatalf("partial.go missing from report.Files; got %v", keysOf(byPath))
+	}
+	if partial.Excluded {
+		t.Error("partial.go: Excluded = true, want false (only one function is ignored)")
+	}
+	if partial.Statements != 1 {
+		t.Errorf("partial.go: Statements = %d, want 1 (IgnoredFunc should be subtracted)", partial.Statements)
+	}
+	if partial.Covered != 1 {
+		t.Errorf("partial.go: Covered = %d, want 1", partial.Covered)
+	}
+	if partial.Coverage < 99 {
+		t.Errorf("partial.go: Coverage = %.1f%%, want 100%%", partial.Coverage)
+	}
+
+	// Sanity: foo.go is a regular tested file and should land at 100%.
+	foo, ok := byPath["foo.go"]
+	if !ok {
+		t.Fatalf("foo.go missing from report.Files; got %v", keysOf(byPath))
+	}
+	if foo.Coverage < 99 {
+		t.Errorf("foo.go: Coverage = %.1f%%, want 100%%", foo.Coverage)
+	}
+}
+
+func keysOf(m map[string]covlens.FileCoverage) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func requireExecutables(t *testing.T, names ...string) {
 	t.Helper()
 	for _, n := range names {
