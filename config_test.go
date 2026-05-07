@@ -3,6 +3,7 @@ package covlens_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/erioch/covlens"
@@ -59,6 +60,91 @@ exclude_files:
 
 	if len(cfg.ExcludeFiles) != 1 || cfg.ExcludeFiles[0] != `_gen\.go$` {
 		t.Errorf("ExcludeFiles = %v, want [_gen\\.go$]", cfg.ExcludeFiles)
+	}
+}
+
+// TestValidate covers each field-level rule individually plus a multi-error
+// case proving Validate accumulates problems via errors.Join instead of
+// returning the first one.
+func TestValidate(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*covlens.Config)
+		wantErr []string // substrings every returned error must contain (all-of)
+	}{
+		{
+			name:    "default config is valid",
+			mutate:  func(c *covlens.Config) {},
+			wantErr: nil,
+		},
+		{
+			name:    "diff_threshold above range",
+			mutate:  func(c *covlens.Config) { c.DiffThreshold = 150 },
+			wantErr: []string{"diff_threshold:", "150"},
+		},
+		{
+			name:    "diff_threshold below range",
+			mutate:  func(c *covlens.Config) { c.DiffThreshold = -1 },
+			wantErr: []string{"diff_threshold:"},
+		},
+		{
+			name:    "total_threshold out of range",
+			mutate:  func(c *covlens.Config) { c.TotalThreshold = 200 },
+			wantErr: []string{"total_threshold:", "200"},
+		},
+		{
+			name:    "invalid theme",
+			mutate:  func(c *covlens.Config) { c.HTML.Theme = "neon" },
+			wantErr: []string{"theme:", "neon"},
+		},
+		{
+			name:    "empty theme is valid (means use default)",
+			mutate:  func(c *covlens.Config) { c.HTML.Theme = "" },
+			wantErr: nil,
+		},
+		{
+			name:    "invalid exclude regex",
+			mutate:  func(c *covlens.Config) { c.ExcludeFiles = []string{"[unclosed"} },
+			wantErr: []string{"exclude_files:", "[unclosed"},
+		},
+		{
+			name: "multiple errors are reported together",
+			mutate: func(c *covlens.Config) {
+				c.DiffThreshold = 150
+				c.TotalThreshold = -1
+				c.HTML.Theme = "neon"
+				c.ExcludeFiles = []string{"[unclosed"}
+			},
+			wantErr: []string{
+				"diff_threshold:",
+				"total_threshold:",
+				"theme:",
+				"exclude_files:",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := covlens.DefaultConfig()
+			tc.mutate(&cfg)
+			err := cfg.Validate()
+
+			if len(tc.wantErr) == 0 {
+				if err != nil {
+					t.Fatalf("Validate: unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Validate: got nil, want error containing %v", tc.wantErr)
+			}
+			for _, want := range tc.wantErr {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error missing %q\nfull error:\n%s", want, err.Error())
+				}
+			}
+		})
 	}
 }
 

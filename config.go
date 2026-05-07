@@ -1,6 +1,7 @@
 package covlens
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -93,20 +94,27 @@ func LoadConfig(path string) (Config, error) {
 }
 
 // Validate checks that thresholds are in range and exclude patterns compile.
+//
+// All field violations are reported together via errors.Join so the user
+// can fix every problem in a single edit pass instead of one-per-rerun.
+// Each error is prefixed with the YAML key for grep-ability.
 func (c Config) Validate() error {
+	var errs []error
+
 	if c.DiffThreshold < 0 || c.DiffThreshold > 100 {
-		return fmt.Errorf("diff_threshold must be between 0 and 100, got %.1f", c.DiffThreshold)
+		errs = append(errs, fmt.Errorf("diff_threshold: must be between 0 and 100, got %.1f", c.DiffThreshold))
 	}
 	if c.TotalThreshold < 0 || c.TotalThreshold > 100 {
-		return fmt.Errorf("total_threshold must be between 0 and 100, got %.1f", c.TotalThreshold)
+		errs = append(errs, fmt.Errorf("total_threshold: must be between 0 and 100, got %.1f", c.TotalThreshold))
 	}
 	if c.HTML.Theme != "" && c.HTML.Theme != "auto" && c.HTML.Theme != "light" && c.HTML.Theme != "dark" {
-		return fmt.Errorf("theme must be \"auto\", \"light\", or \"dark\", got %q", c.HTML.Theme)
+		errs = append(errs, fmt.Errorf("theme: must be \"auto\", \"light\", or \"dark\", got %q", c.HTML.Theme))
 	}
 	if _, err := c.compileExcludes(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
-	return nil
+
+	return errors.Join(errs...)
 }
 
 // compileExcludes compiles the ExcludeFiles patterns into regexps.
@@ -120,7 +128,7 @@ func (c Config) compileExcludes() ([]*regexp.Regexp, error) {
 	for _, pattern := range c.ExcludeFiles {
 		re, err := regexp.Compile(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("invalid exclude_files pattern %q: %w", pattern, err)
+			return nil, fmt.Errorf("exclude_files: invalid pattern %q: %w", pattern, err)
 		}
 		out = append(out, re)
 	}
