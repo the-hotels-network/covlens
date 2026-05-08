@@ -5,20 +5,14 @@ import (
 	"fmt"
 	"html/template"
 	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/erioch/covlens"
 )
 
-// SourceFile holds rendered source HTML for one file.
-type SourceFile struct {
-	Path       string
-	Package    string
-	SourceHTML template.HTML
-	Coverage   float64
-	Status     string
-}
-
-// FileSummary holds per-file coverage data for the report table.
-type FileSummary struct {
+// fileSummary is the per-file row in the report table (template-only).
+type fileSummary struct {
 	Path       string
 	Package    string
 	Coverage   float64
@@ -28,25 +22,21 @@ type FileSummary struct {
 	Status     string
 }
 
-// templateData is the struct passed to the HTML template.
-type templateData struct {
-	ReportInput
-	GeneratedAt         string
-	FileCount           int
-	SourceFiles         []SourceFile
-	CSS                 template.CSS
-	TotalAboveThreshold bool // TotalCoverage >= TotalThreshold (independent of ratchet)
-	HasDelta            bool // true when baseline coverage is available
-	CoverageDelta       float64
-	DeltaClass          string // "positive", "negative", or "neutral"
-	InitialTheme        string // "light", "dark", or "" (auto — let CSS/JS decide)
+// sourceFile holds the rendered HTML for one file's source view (template-only).
+type sourceFile struct {
+	Path       string
+	Package    string
+	SourceHTML template.HTML
+	Coverage   float64
+	Status     string
 }
 
-// ReportInput contains all the data needed to generate an HTML report.
-type ReportInput struct {
+// reportInput is the flat per-template payload the existing template expects.
+// Internal to this package — built from covlens.Report + covlens.Config.
+type reportInput struct {
 	DiffCoverage          float64
 	TotalCoverage         float64
-	BaselineTotalCoverage float64 // non-zero when RatchetTotal is true
+	BaselineTotalCoverage float64
 	DiffPassed            bool
 	TotalPassed           bool
 	DiffThreshold         float64
@@ -54,14 +44,33 @@ type ReportInput struct {
 	BaseBranch            string
 	ShowExcluded          bool
 	RatchetTotal          bool
-	// Theme is the default report theme: "auto", "light", or "dark".
-	Theme    string
-	FullMode bool
-	Files    []FileSummary
+	Theme                 string
+	FullMode              bool
+	Files                 []fileSummary
 }
 
-// Generate renders the HTML report as a single self-contained file.
-func Generate(input ReportInput, sourceFiles []SourceFile, outputPath string) error {
+// templateData is the struct passed to the HTML template.
+type templateData struct {
+	reportInput
+	GeneratedAt         string
+	FileCount           int
+	SourceFiles         []sourceFile
+	CSS                 template.CSS
+	TotalAboveThreshold bool
+	HasDelta            bool
+	CoverageDelta       float64
+	DeltaClass          string
+	InitialTheme        string
+}
+
+// Generate renders the HTML report from a covlens.Report into a single
+// self-contained file at outputPath.
+//
+// A failure to render any single file's source view is a hard error: the
+// likely causes (file deleted, permission denied, disk error) are systemic,
+// and a partial report with silently-missing source views is worse UX than
+// a clear failure message.
+func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 	cssBytes, err := content.ReadFile("static/style.css")
 	if err != nil {
 		return fmt.Errorf("reading embedded CSS: %w", err)
@@ -75,6 +84,54 @@ func Generate(input ReportInput, sourceFiles []SourceFile, outputPath string) er
 	tmpl, err := template.New("report").Parse(string(tmplBytes))
 	if err != nil {
 		return fmt.Errorf("parsing template: %w", err)
+	}
+
+	files := make([]fileSummary, 0, len(r.Files))
+	covByPath := make(map[string]covlens.FileCoverage, len(r.Files))
+	for _, fc := range r.Files {
+		files = append(files, fileSummary{
+			Path:       fc.Path,
+			Package:    fc.Package,
+			Coverage:   fc.Coverage,
+			Statements: fc.Statements,
+			Covered:    fc.Covered,
+			Excluded:   fc.Excluded,
+			Status:     fc.Status,
+		})
+		covByPath[fc.Path] = fc
+	}
+
+	sourceFiles := make([]sourceFile, 0, len(r.Sources))
+	for _, src := range r.Sources {
+		absPath := filepath.Join(r.SourceRoot, src.Path)
+		rendered, err := RenderSource(absPath, src.Blocks, src.Hunks)
+		if err != nil {
+			return fmt.Errorf("rendering source for %s: %w", src.Path, err)
+		}
+		fc := covByPath[src.Path]
+		sourceFiles = append(sourceFiles, sourceFile{
+			Path:       src.Path,
+			Package:    src.Package,
+			SourceHTML: rendered,
+			Coverage:   fc.Coverage,
+			Status:     fc.Status,
+		})
+	}
+
+	input := reportInput{
+		DiffCoverage:          r.DiffCoverage,
+		TotalCoverage:         r.TotalCoverage,
+		BaselineTotalCoverage: r.BaselineTotalCoverage,
+		DiffPassed:            r.DiffPassed,
+		TotalPassed:           r.TotalPassed,
+		DiffThreshold:         cfg.DiffThreshold,
+		TotalThreshold:        cfg.TotalThreshold,
+		BaseBranch:            cfg.BaseBranch,
+		ShowExcluded:          cfg.HTML.ShowExcluded,
+		RatchetTotal:          cfg.RatchetTotal,
+		Theme:                 cfg.HTML.Theme,
+		FullMode:              cfg.FullMode,
+		Files:                 files,
 	}
 
 	fileCount := 0
@@ -101,7 +158,7 @@ func Generate(input ReportInput, sourceFiles []SourceFile, outputPath string) er
 	}
 
 	data := templateData{
-		ReportInput:         input,
+		reportInput:         input,
 		GeneratedAt:         time.Now().Format("2006-01-02 15:04"),
 		FileCount:           fileCount,
 		SourceFiles:         sourceFiles,

@@ -81,8 +81,11 @@ func TestRun_DiffCoverage(t *testing.T) {
 	if report.OutputDir == "" {
 		t.Error("OutputDir empty — expected the resolved output directory to be set")
 	}
-	if len(report.SourceFiles) == 0 {
-		t.Error("SourceFiles empty — expected per-file source rendering for the HTML printer")
+	if len(report.Sources) == 0 {
+		t.Error("Sources empty — expected per-file rendering inputs for printers")
+	}
+	if report.SourceRoot == "" {
+		t.Error("SourceRoot empty — printers need it to resolve Source paths")
 	}
 	// Happy path: nothing should have failed silently.
 	if len(report.Warnings) != 0 {

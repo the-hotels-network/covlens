@@ -1,8 +1,13 @@
 package covlens
 
-import "github.com/erioch/covlens/printers/html"
+import "golang.org/x/tools/cover"
 
 // Report holds the results of a coverage analysis run.
+//
+// Library consumers who only need numeric coverage should read DiffCoverage,
+// TotalCoverage, and Files. The Sources slice is a separate channel of raw
+// per-file rendering inputs intended for printers that produce source views
+// (e.g. the HTML printer). Consumers that don't render source can ignore it.
 type Report struct {
 	DiffCoverage          float64
 	TotalCoverage         float64
@@ -14,10 +19,16 @@ type Report struct {
 	// profiles were written. Printers (e.g. the HTML renderer) typically
 	// write their output here.
 	OutputDir string
-	// SourceFiles holds per-file syntax-highlighted source with coverage
-	// overlay, ready to be consumed by the HTML printer. Library users
-	// who only want numeric coverage can ignore this field.
-	SourceFiles []html.SourceFile
+	// SourceRoot is the absolute path that SourceData.Path entries are
+	// relative to. Printers that need to read a file from disk combine it
+	// with the entry's Path. In diff mode this is the git working-tree
+	// root; in full mode it's the configured WorkDir.
+	SourceRoot string
+	// Sources carries raw per-file rendering inputs (profile blocks, diff
+	// hunks) for printers that render source views. Excluded files and
+	// files with no profile data are NOT in this slice — only files with
+	// renderable content appear here.
+	Sources []SourceData
 	// Warnings collects non-fatal issues observed during the run that
 	// callers may want to surface (e.g. a corrupt coverage profile, a
 	// per-file diff hunk failure). Fatal failures are returned as errors.
@@ -33,4 +44,23 @@ type FileCoverage struct {
 	Covered    int
 	Excluded   bool
 	Status     string // "ok", "fail", "warn", "excluded"
+}
+
+// SourceData carries raw inputs a printer needs to render the source view
+// of a single file with coverage overlay.
+//
+// Path is git-relative; combine with Report.GitRoot to read the file.
+// Hunks may be nil — that signals "render the full file" (used in full mode
+// and for files outside the diff).
+type SourceData struct {
+	Path    string
+	Package string
+	Blocks  []cover.ProfileBlock
+	Hunks   []Hunk
+}
+
+// Hunk is a contiguous changed-line range, inclusive on both ends (1-based).
+type Hunk struct {
+	Start int
+	End   int
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/erioch/covlens/directive"
 	"github.com/erioch/covlens/git"
 	"github.com/erioch/covlens/packages"
-	"github.com/erioch/covlens/printers/html"
 )
 
 // Run executes the full coverage analysis pipeline.
@@ -371,14 +370,15 @@ func assembleReport(s *runState) error {
 		TotalPassed:           totalPassed,
 		Files:                 s.fileCoverages,
 		OutputDir:             s.outputDir,
+		SourceRoot:            s.gitRoot,
 	}
 	return nil
 }
 
 func finalizeReport(s *runState) error {
-	// Build per-file rendered source for the HTML printer (diff view: only
-	// changed lines ± context). Library users who don't want HTML can ignore
-	// Report.SourceFiles.
+	// Emit per-file raw rendering inputs for printers that want to render
+	// source views. The actual HTML rendering happens in the printer, not
+	// here — keeping covlens decoupled from any specific output format.
 	profileMap := make(map[string]*cover.Profile)
 	for _, p := range s.diffProfiles {
 		profileMap[p.FileName] = p
@@ -388,33 +388,21 @@ func finalizeReport(s *runState) error {
 		if fs.excluded || fs.profileKey == "" {
 			continue
 		}
-		absPath := filepath.Join(s.gitRoot, fs.path)
 		var blocks []cover.ProfileBlock
 		if p, ok := profileMap[fs.profileKey]; ok {
 			blocks = p.Blocks
 		}
 
-		var rHunks []html.Hunk
+		var hunks []Hunk
 		for _, h := range s.fileHunks[fs.profileKey] {
-			rHunks = append(rHunks, html.Hunk{Start: h.Start, End: h.End})
+			hunks = append(hunks, Hunk{Start: h.Start, End: h.End})
 		}
 
-		var diffFileCov float64 = -1
-		if r, ok := s.fileResults[fs.profileKey]; ok && r.Stmts > 0 {
-			diffFileCov = float64(r.Covered) / float64(r.Stmts) * 100
-		}
-
-		rendered, err := html.RenderSource(absPath, blocks, rHunks)
-		if err != nil {
-			s.warnings = append(s.warnings, fmt.Sprintf("could not render source for %s: %v", fs.path, err))
-			continue
-		}
-		s.report.SourceFiles = append(s.report.SourceFiles, html.SourceFile{
-			Path:       fs.path,
-			Package:    fs.pkg,
-			SourceHTML: rendered,
-			Coverage:   diffFileCov,
-			Status:     fileStatusFor(diffFileCov, s.cfg.DiffThreshold),
+		s.report.Sources = append(s.report.Sources, SourceData{
+			Path:    fs.path,
+			Package: fs.pkg,
+			Blocks:  blocks,
+			Hunks:   hunks,
 		})
 	}
 
@@ -452,7 +440,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 	}
 
 	var fileCoverages []FileCoverage
-	var sourceFiles []html.SourceFile
+	var sources []SourceData
 
 	for _, p := range totalProfiles {
 		absPath := resolveAbsPath(p.FileName, modPathMap)
@@ -504,18 +492,12 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 			Status:     status,
 		})
 
-		// nil hunks → RenderSource shows the full file
-		rendered, err := html.RenderSource(absPath, p.Blocks, nil)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("could not render source for %s: %v", relPath, err))
-			continue
-		}
-		sourceFiles = append(sourceFiles, html.SourceFile{
-			Path:       relPath,
-			Package:    pkg,
-			SourceHTML: rendered,
-			Coverage:   cov,
-			Status:     status,
+		// nil Hunks signals "render the full file" to printers.
+		sources = append(sources, SourceData{
+			Path:    relPath,
+			Package: pkg,
+			Blocks:  p.Blocks,
+			Hunks:   nil,
 		})
 	}
 
@@ -524,8 +506,9 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 		TotalPassed:   totalCov >= cfg.TotalThreshold,
 		DiffPassed:    true,
 		Files:         fileCoverages,
-		SourceFiles:   sourceFiles,
+		Sources:       sources,
 		OutputDir:     outputDir,
+		SourceRoot:    cfg.WorkDir,
 		Warnings:      warnings,
 	}
 	return r, nil

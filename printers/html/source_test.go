@@ -11,6 +11,8 @@ import (
 
 	"golang.org/x/tools/cover"
 	"golang.org/x/tools/txtar"
+
+	"github.com/erioch/covlens"
 )
 
 var update = flag.Bool("update", false, "regenerate golden output inside txtar fixtures")
@@ -42,7 +44,7 @@ func TestRenderSource_Goldens(t *testing.T) {
 			src := mustReadArchive(t, ar, "source.go")
 			blocks := parseBlocks(t, mustReadArchive(t, ar, "blocks.txt"))
 
-			var hunks []Hunk
+			var hunks []covlens.Hunk
 			if raw, ok := readArchive(ar, "hunks.txt"); ok {
 				hunks = parseHunks(t, raw)
 			}
@@ -137,9 +139,9 @@ func parseBlocks(t *testing.T, raw []byte) []cover.ProfileBlock {
 	return blocks
 }
 
-func parseHunks(t *testing.T, raw []byte) []Hunk {
+func parseHunks(t *testing.T, raw []byte) []covlens.Hunk {
 	t.Helper()
-	var hunks []Hunk
+	var hunks []covlens.Hunk
 	for i, line := range strings.Split(string(raw), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -157,7 +159,7 @@ func parseHunks(t *testing.T, raw []byte) []Hunk {
 		if err != nil {
 			t.Fatalf("hunks.txt line %d end: %v", i+1, err)
 		}
-		hunks = append(hunks, Hunk{Start: start, End: end})
+		hunks = append(hunks, covlens.Hunk{Start: start, End: end})
 	}
 	return hunks
 }

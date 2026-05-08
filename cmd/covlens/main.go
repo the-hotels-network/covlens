@@ -105,37 +105,7 @@ func main() {
 // writeHTMLReport renders the HTML coverage report and returns its path.
 func writeHTMLReport(r *covlens.Report, cfg covlens.Config) (string, error) {
 	path := filepath.Join(r.OutputDir, "coverage_report.html")
-
-	files := make([]html.FileSummary, 0, len(r.Files))
-	for _, fc := range r.Files {
-		files = append(files, html.FileSummary{
-			Path:       fc.Path,
-			Package:    fc.Package,
-			Coverage:   fc.Coverage,
-			Statements: fc.Statements,
-			Covered:    fc.Covered,
-			Excluded:   fc.Excluded,
-			Status:     fc.Status,
-		})
-	}
-
-	input := html.ReportInput{
-		DiffCoverage:          r.DiffCoverage,
-		TotalCoverage:         r.TotalCoverage,
-		BaselineTotalCoverage: r.BaselineTotalCoverage,
-		DiffPassed:            r.DiffPassed,
-		TotalPassed:           r.TotalPassed,
-		DiffThreshold:         cfg.DiffThreshold,
-		TotalThreshold:        cfg.TotalThreshold,
-		BaseBranch:            cfg.BaseBranch,
-		ShowExcluded:          cfg.HTML.ShowExcluded,
-		RatchetTotal:          cfg.RatchetTotal,
-		Theme:                 cfg.HTML.Theme,
-		FullMode:              cfg.FullMode,
-		Files:                 files,
-	}
-
-	if err := html.Generate(input, r.SourceFiles, path); err != nil {
+	if err := html.Generate(r, cfg, path); err != nil {
 		return "", err
 	}
 	return path, nil

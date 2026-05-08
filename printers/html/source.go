@@ -13,10 +13,9 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"golang.org/x/tools/cover"
-)
 
-// Hunk represents a contiguous range of lines [Start, End] (1-based, inclusive).
-type Hunk struct{ Start, End int }
+	"github.com/erioch/covlens"
+)
 
 const contextLines = 3
 
@@ -26,7 +25,7 @@ const contextLines = 3
 // When hunks are provided only the changed line ranges (± contextLines) are
 // rendered, separated by ··· dividers — like a GitHub PR diff view.
 // When hunks is nil the full file is shown.
-func RenderSource(filePath string, blocks []cover.ProfileBlock, hunks []Hunk) (template.HTML, error) {
+func RenderSource(filePath string, blocks []cover.ProfileBlock, hunks []covlens.Hunk) (template.HTML, error) {
 	src, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", fmt.Errorf("reading source %s: %w", filePath, err)
@@ -148,7 +147,7 @@ func splitAndAnnotate(html string, lineCov []int) (header string, lines []string
 
 // buildVisibleLines returns a sorted list of 1-based line numbers that fall
 // within any hunk expanded by contextLines on both sides.
-func buildVisibleLines(hunks []Hunk, totalLines int) []int {
+func buildVisibleLines(hunks []covlens.Hunk, totalLines int) []int {
 	visible := make(map[int]struct{})
 	for _, h := range hunks {
 		start := h.Start - contextLines
