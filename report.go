@@ -29,10 +29,6 @@ type Report struct {
 	// files with no profile data are NOT in this slice — only files with
 	// renderable content appear here.
 	Sources []SourceData
-	// Warnings collects non-fatal issues observed during the run that
-	// callers may want to surface (e.g. a corrupt coverage profile, a
-	// per-file diff hunk failure). Fatal failures are returned as errors.
-	Warnings []string
 }
 
 // FileCoverage holds coverage data for a single source file.

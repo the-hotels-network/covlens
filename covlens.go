@@ -143,7 +143,6 @@ type runState struct {
 
 	// output
 	fileCoverages []FileCoverage
-	warnings      []string
 	report        *Report
 }
 
@@ -265,7 +264,6 @@ func runCoverage(s *runState) error {
 		return fmt.Errorf("running total coverage: %w", err)
 	}
 	s.totalProfilePath = totalRes.ProfilePath
-	s.warnings = append(s.warnings, totalRes.Warnings...)
 
 	logProgress(s.cfg.stderr(), "Running diff coverage...")
 	diffRes, err := coverage.RunDiff(s.ctx, s.grouped, s.outputDir, s.cfg.testOutput())
@@ -273,14 +271,13 @@ func runCoverage(s *runState) error {
 		return fmt.Errorf("running diff coverage: %w", err)
 	}
 	s.diffProfilePath = diffRes.ProfilePath
-	s.warnings = append(s.warnings, diffRes.Warnings...)
 	return nil
 }
 
 func computeCoverage(s *runState) error {
 	totalCov, err := coverage.TotalCoverage(s.totalProfilePath)
 	if err != nil {
-		s.warnings = append(s.warnings, fmt.Sprintf("could not parse total coverage profile: %v", err))
+		return fmt.Errorf("parsing total coverage profile: %w", err)
 	}
 	s.totalCov = totalCov
 
@@ -295,7 +292,7 @@ func computeCoverage(s *runState) error {
 
 	diffProfiles, err := cover.ParseProfiles(s.diffProfilePath)
 	if err != nil {
-		s.warnings = append(s.warnings, fmt.Sprintf("could not parse diff coverage profile: %v", err))
+		return fmt.Errorf("parsing diff coverage profile: %w", err)
 	}
 	s.diffProfiles = diffProfiles
 
@@ -308,8 +305,7 @@ func computeCoverage(s *runState) error {
 		}
 		hunks, err := s.gc.DiffHunks(s.ctx, s.mergeBase, fs.path)
 		if err != nil {
-			s.warnings = append(s.warnings, fmt.Sprintf("could not compute diff hunks for %s: %v", fs.path, err))
-			continue
+			return fmt.Errorf("computing diff hunks for %s: %w", fs.path, err)
 		}
 		s.fileHunks[fs.profileKey] = hunks
 
@@ -405,8 +401,6 @@ func finalizeReport(s *runState) error {
 			Hunks:   hunks,
 		})
 	}
-
-	s.report.Warnings = s.warnings
 	return nil
 }
 
@@ -423,15 +417,14 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 	if err != nil {
 		return nil, fmt.Errorf("running coverage: %w", err)
 	}
-	warnings := append([]string{}, totalRes.Warnings...)
 
 	totalCov, err := coverage.TotalCoverage(totalRes.ProfilePath)
 	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("could not parse coverage profile: %v", err))
+		return nil, fmt.Errorf("parsing coverage profile: %w", err)
 	}
 	totalProfiles, err := cover.ParseProfiles(totalRes.ProfilePath)
 	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("could not parse coverage profile blocks: %v", err))
+		return nil, fmt.Errorf("parsing coverage profile blocks: %w", err)
 	}
 
 	modPathMap, err := buildModulePathMap(ctx, moduleRoots)
@@ -509,7 +502,6 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 		Sources:       sources,
 		OutputDir:     outputDir,
 		SourceRoot:    cfg.WorkDir,
-		Warnings:      warnings,
 	}
 	return r, nil
 }

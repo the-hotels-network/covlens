@@ -32,8 +32,7 @@ type Report struct {
 
 	HTMLReportPath string `json:"htmlReportPath,omitempty"`
 
-	Files    []File   `json:"files"`
-	Warnings []string `json:"warnings,omitempty"`
+	Files []File `json:"files"`
 }
 
 // File is a per-file entry in Report.Files.

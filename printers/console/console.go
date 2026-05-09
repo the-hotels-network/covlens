@@ -68,14 +68,6 @@ func PrintSummary(out io.Writer, r *covlens.Report, cfg covlens.Config) {
 	}
 }
 
-// PrintWarnings writes each non-fatal warning recorded on the report,
-// one per line, prefixed with the standard ⚠ glyph.
-func PrintWarnings(out io.Writer, r *covlens.Report) {
-	for _, w := range r.Warnings {
-		fmt.Fprintf(out, "%s⚠%s %s\n", cYellow, cReset, w)
-	}
-}
-
 // Info writes a green-checkmark success line to out.
 func Info(out io.Writer, msg string) {
 	fmt.Fprintf(out, "%s✔%s %s\n", cGreen, cReset, msg)

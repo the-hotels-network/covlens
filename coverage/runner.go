@@ -15,23 +15,26 @@ import (
 type RunResult struct {
 	// ProfilePath is the path to the merged coverage profile.
 	ProfilePath string
-	// Warnings collects per-module non-fatal issues — most commonly a
-	// `go test` non-zero exit with a coverage profile still written
-	// (test failures during a run that produced valid coverage data).
-	Warnings []string
 }
 
 // RunTotal runs `go test -short -coverprofile -covermode=atomic ./...` in each
 // module root and returns the merged coverage profile.
 //
-// A module that exits non-zero and produces no coverage profile (typically a
-// compile failure) is treated as a hard error and aborts the run after all
-// modules have been attempted. A module that exits non-zero but writes a
-// profile is recorded as a warning — coverage data is still valid.
+// Any module that exits non-zero is a hard error: compile failures (no profile
+// written) and test failures (profile written, but tests failed) both abort
+// the run after all modules have been attempted.
+//
+// Design note on test-failure-with-valid-profile being a hard error:
+// a coverage report alongside failing tests is a confusing dual signal, and
+// the failures already streamed live to the caller's writer. If a user ever
+// needs the inverse — collect coverage despite failing tests — the right
+// shape is a typed Report.TestsFailed bool surfaced via the JSON sidecar,
+// NOT a generic warnings channel. Re-deciding from scratch is cheaper than
+// maintaining a soft-warning path that has no current callers.
 func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, output io.Writer) (RunResult, error) {
 	var partials []string
 	var res RunResult
-	var compileFailures []string
+	var compileFailures, testFailures []string
 
 	for i, root := range moduleRoots {
 		prof := filepath.Join(outputDir, fmt.Sprintf("total_%d.out", i))
@@ -47,8 +50,8 @@ func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, outpu
 			continue
 		}
 		if runErr != nil {
-			res.Warnings = append(res.Warnings,
-				fmt.Sprintf("module %s: tests failed, coverage still collected: %v", root, runErr))
+			testFailures = append(testFailures, fmt.Sprintf("%s: %v", root, runErr))
+			continue
 		}
 		partials = append(partials, prof)
 	}
@@ -56,6 +59,9 @@ func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, outpu
 	if len(compileFailures) > 0 {
 		return res, fmt.Errorf("module(s) failed to produce coverage profile (likely compile failure): %s",
 			strings.Join(compileFailures, "; "))
+	}
+	if len(testFailures) > 0 {
+		return res, fmt.Errorf("module(s) had failing tests: %s", strings.Join(testFailures, "; "))
 	}
 
 	merged := filepath.Join(outputDir, "coverage.out")
@@ -68,12 +74,12 @@ func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, outpu
 
 // RunDiff runs coverage only for the specified packages, grouped by module root.
 // The coverpkg flag ensures cross-package coverage is captured. Failure semantics
-// match RunTotal: compile failures are hard errors, test failures with valid
-// profile data are warnings.
+// match RunTotal: any non-zero `go test` exit (compile failure or test failure)
+// is a hard error.
 func RunDiff(ctx context.Context, grouped map[string][]string, outputDir string, output io.Writer) (RunResult, error) {
 	var partials []string
 	var res RunResult
-	var compileFailures []string
+	var compileFailures, testFailures []string
 
 	i := 0
 	for root, pkgs := range grouped {
@@ -95,8 +101,8 @@ func RunDiff(ctx context.Context, grouped map[string][]string, outputDir string,
 			continue
 		}
 		if runErr != nil {
-			res.Warnings = append(res.Warnings,
-				fmt.Sprintf("module %s: tests failed, coverage still collected: %v", root, runErr))
+			testFailures = append(testFailures, fmt.Sprintf("%s: %v", root, runErr))
+			continue
 		}
 		partials = append(partials, prof)
 	}
@@ -104,6 +110,9 @@ func RunDiff(ctx context.Context, grouped map[string][]string, outputDir string,
 	if len(compileFailures) > 0 {
 		return res, fmt.Errorf("module(s) failed to produce coverage profile (likely compile failure): %s",
 			strings.Join(compileFailures, "; "))
+	}
+	if len(testFailures) > 0 {
+		return res, fmt.Errorf("module(s) had failing tests: %s", strings.Join(testFailures, "; "))
 	}
 
 	merged := filepath.Join(outputDir, "coverage_diff.out")

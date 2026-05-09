@@ -26,7 +26,6 @@ func TestEncode_RoundTrip(t *testing.T) {
 			{Path: "bar.go", Package: "example/bar", Coverage: 50, Statements: 4, Covered: 2, Status: "fail"},
 			{Path: "mocks_x.go", Package: "example/mocks", Coverage: -1, Excluded: true, Status: "excluded"},
 		},
-		Warnings: []string{"could not parse profile for x.go"},
 	}
 
 	var buf bytes.Buffer
@@ -63,13 +62,10 @@ func TestEncode_RoundTrip(t *testing.T) {
 	if got.HTMLReportPath != "/tmp/coverage_report.html" {
 		t.Errorf("HTMLReportPath = %q, want %q", got.HTMLReportPath, "/tmp/coverage_report.html")
 	}
-	if len(got.Warnings) != 1 {
-		t.Errorf("Warnings: got %d, want 1", len(got.Warnings))
-	}
 }
 
 func TestEncode_OmitsEmptyOptionalFields(t *testing.T) {
-	// Minimal Report — exercises omitempty on RatchetTotal, baseline, warnings, htmlReportPath, etc.
+	// Minimal Report — exercises omitempty on RatchetTotal, baseline, htmlReportPath, etc.
 	in := Report{
 		Schema:         SchemaVersion,
 		Mode:           "diff",
@@ -95,7 +91,7 @@ func TestEncode_OmitsEmptyOptionalFields(t *testing.T) {
 		}
 	}
 	// Optional fields must be omitted when zero/empty.
-	for _, banned := range []string{`"baselineTotalCoverage"`, `"ratchetTotal"`, `"warnings"`, `"htmlReportPath"`, `"baseBranch"`} {
+	for _, banned := range []string{`"baselineTotalCoverage"`, `"ratchetTotal"`, `"htmlReportPath"`, `"baseBranch"`} {
 		if strings.Contains(out, banned) {
 			t.Errorf("output unexpectedly contains optional field %s\n%s", banned, out)
 		}

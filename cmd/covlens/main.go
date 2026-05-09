@@ -61,8 +61,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	console.PrintWarnings(os.Stderr, report)
-
 	// HTML first — its path is referenced from the JSON sidecar.
 	htmlPath := ""
 	if !*noHTML && len(report.Files) > 0 {
@@ -147,7 +145,6 @@ func writeJSONReport(r *covlens.Report, cfg covlens.Config, htmlPath string) (st
 		TotalPassed:           r.TotalPassed,
 		HTMLReportPath:        htmlPath,
 		Files:                 files,
-		Warnings:              r.Warnings,
 	}
 
 	f, err := os.Create(path)

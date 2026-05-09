@@ -87,10 +87,6 @@ func TestRun_DiffCoverage(t *testing.T) {
 	if report.SourceRoot == "" {
 		t.Error("SourceRoot empty — printers need it to resolve Source paths")
 	}
-	// Happy path: nothing should have failed silently.
-	if len(report.Warnings) != 0 {
-		t.Errorf("unexpected warnings on happy path: %v", report.Warnings)
-	}
 }
 
 // TestRun_NoChangedFiles exercises the early-exit branch in detectChangedFiles:
@@ -120,9 +116,6 @@ func TestRun_NoChangedFiles(t *testing.T) {
 	}
 	if len(report.Files) != 0 {
 		t.Errorf("expected 0 files for docs-only change, got %d: %+v", len(report.Files), report.Files)
-	}
-	if len(report.Warnings) != 0 {
-		t.Errorf("unexpected warnings on docs-only run: %v", report.Warnings)
 	}
 }
 
