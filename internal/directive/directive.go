@@ -49,7 +49,7 @@ func Parse(filePath string) (*Exclusion, error) {
 			continue
 		}
 		for _, c := range cg.List {
-			if strings.Contains(c.Text, "covlens:ignore") {
+			if isIgnoreDirective(c.Text) {
 				excl.WholeFile = true
 				return excl, nil
 			}
@@ -63,7 +63,7 @@ func Parse(filePath string) (*Exclusion, error) {
 			continue
 		}
 		for _, c := range fn.Doc.List {
-			if strings.Contains(c.Text, "covlens:ignore") {
+			if isIgnoreDirective(c.Text) {
 				excl.Functions = append(excl.Functions, FuncSpan{
 					Name:      fn.Name.Name,
 					StartLine: fset.Position(fn.Pos()).Line,
@@ -75,4 +75,17 @@ func Parse(filePath string) (*Exclusion, error) {
 	}
 
 	return excl, nil
+}
+
+// isIgnoreDirective reports whether commentText is a //covlens:ignore directive
+// rather than prose that happens to mention the string. The directive form
+// (consistent with //go:embed, //go:build, etc.) is the literal "covlens:ignore"
+// at the start of the comment text, optionally separated from "//" or "/*" by
+// whitespace, optionally followed by a free-text rationale.
+func isIgnoreDirective(commentText string) bool {
+	text := strings.TrimPrefix(commentText, "//")
+	text = strings.TrimPrefix(text, "/*")
+	text = strings.TrimSuffix(text, "*/")
+	text = strings.TrimSpace(text)
+	return strings.HasPrefix(text, "covlens:ignore")
 }
