@@ -20,8 +20,30 @@ import (
 	"github.com/erioch/covlens/packages"
 )
 
-// Run executes the full coverage analysis pipeline.
+// Run executes a coverage analysis and returns the resulting report.
 func Run(ctx context.Context, cfg Config) (*Report, error) {
+	r, err := newRunner(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if r.cfg.FullMode {
+		return r.runFull()
+	}
+	return r.run()
+}
+
+// runner holds the immutable request scope shared by every phase of a run.
+// All fields are set once in newRunner and never mutated afterwards; phase
+// outputs flow through return values, not back onto the runner.
+type runner struct {
+	ctx        context.Context
+	cfg        Config
+	outputDir  string
+	excludeRes []*regexp.Regexp
+	git        *git.Client
+}
+
+func newRunner(ctx context.Context, cfg Config) (*runner, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -51,46 +73,89 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 		return nil, fmt.Errorf("compiling exclude patterns: %w", err)
 	}
 
-	if cfg.FullMode {
-		return runFull(ctx, cfg, outputDir, excludeRes)
-	}
-
-	s := &runState{
+	return &runner{
 		ctx:        ctx,
 		cfg:        cfg,
 		outputDir:  outputDir,
 		excludeRes: excludeRes,
-		pkgCache:   make(map[string]packages.ModulePackage),
-	}
-	for _, st := range diffPipeline {
-		if err := st(s); err != nil {
-			return nil, err
-		}
-		if s.done {
-			return s.report, nil
-		}
-	}
-	return s.report, nil
+		git:        &git.Client{WorkDir: cfg.WorkDir},
+	}, nil
 }
 
-// stage is one step in the diff-coverage pipeline. Stages share state via
-// runState and may set s.done to short-circuit the remaining stages.
-type stage func(*runState) error
+// run executes diff-mode coverage analysis: detect changed files vs the base
+// branch, classify them, run targeted coverage, and assemble the report.
+func (r *runner) run() (*Report, error) {
+	scope, err := r.detectChangedFiles()
+	if err != nil {
+		return nil, err
+	}
+	if len(scope.changedFiles) == 0 {
+		return r.emptyReport(), nil
+	}
 
-// diffPipeline is the ordered list of stages run by Run for diff-mode coverage.
-// Pattern: Pipes-and-filters.
-var diffPipeline = []stage{
-	detectChangedFiles,
-	classifyFiles,
-	resolvePackages,
-	runCoverage,
-	computeCoverage,
-	buildFileEntries,
-	assembleReport,
-	finalizeReport,
+	subjects, err := r.classifyFiles(scope)
+	if err != nil {
+		return nil, err
+	}
+
+	targets := r.resolvePackages(subjects)
+
+	profiles, err := r.runCoverage(targets)
+	if err != nil {
+		return nil, err
+	}
+
+	stats, err := r.computeStats(scope, subjects, targets, profiles)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.buildReport(scope, subjects, profiles, stats), nil
 }
 
-// fileState tracks per-file metadata accumulated through the pipeline.
+func (r *runner) emptyReport() *Report {
+	return &Report{DiffPassed: true, TotalPassed: true, OutputDir: r.outputDir}
+}
+
+// coverageScope is the input to a diff-mode run: the git context and the list
+// of files that differ from the base branch.
+type coverageScope struct {
+	repoRoot     string
+	mergeBase    string
+	changedFiles []string
+}
+
+// coverageSubjects is the set of files under measurement, each annotated with
+// its package, module, and exclusion metadata.
+type coverageSubjects struct {
+	files []fileState
+}
+
+// coverageTargets is the set of `go test` invocations needed to produce
+// profiles for the subjects: packages grouped by their owning module root.
+type coverageTargets struct {
+	grouped     map[string][]string
+	moduleRoots []string
+}
+
+// coverageProfiles is the raw output of `go test -coverprofile`: paths to the
+// merged total / diff profiles, plus the parsed diff blocks for downstream use.
+type coverageProfiles struct {
+	totalProfilePath string
+	diffProfilePath  string
+	diffProfiles     []*cover.Profile
+}
+
+// coverageStats holds the computed numbers and per-file results derived from
+// the profiles, with diff hunks and function-level exclusions applied.
+type coverageStats struct {
+	totalCov, diffCov, baselineCov float64
+	diffStmts, diffCovered         int
+	fileResults                    map[string]coverage.FileResult
+	fileHunks                      map[string][]git.Hunk
+}
+
+// fileState tracks per-file metadata produced by classifyFiles.
 type fileState struct {
 	path         string
 	excluded     bool
@@ -100,102 +165,54 @@ type fileState struct {
 	funcExcluded []directive.FuncSpan // function-level exclusions
 }
 
-// runState carries the data flowing through the diff-coverage pipeline.
-// Each stage reads from and writes to this struct; setting done=true
-// short-circuits the remaining stages.
-type runState struct {
-	ctx       context.Context
-	cfg       Config
-	outputDir string
-	done      bool
+func (r *runner) detectChangedFiles() (coverageScope, error) {
+	var scope coverageScope
 
-	// derived once before the pipeline starts
-	excludeRes []*regexp.Regexp
-	pkgCache   map[string]packages.ModulePackage // absDir → import path / module root, shared across stages
+	root, err := r.git.Root(r.ctx)
+	if err != nil {
+		return scope, fmt.Errorf("finding git root: %w", err)
+	}
+	scope.repoRoot = root
 
-	// git
-	gc        *git.Client
-	gitRoot   string
-	mergeBase string
+	if err := r.git.VerifyBranch(r.ctx, r.cfg.BaseBranch); err != nil {
+		return scope, err
+	}
 
-	// files
-	changedFiles []string
-	allFiles     []fileState
+	mb, err := r.git.MergeBase(r.ctx, "HEAD", r.cfg.BaseBranch)
+	if err != nil {
+		return scope, err
+	}
+	scope.mergeBase = mb
 
-	// packages
-	grouped     map[string][]string
-	moduleRoots []string
-
-	// coverage
-	totalProfilePath string
-	diffProfilePath  string
-	diffProfiles     []*cover.Profile
-	fileHunks        map[string][]git.Hunk
-	excludedRanges   map[string][]git.Hunk
-	fileResults      map[string]coverage.FileResult
-
-	// numbers
-	totalCov    float64
-	diffCov     float64
-	baselineCov float64
-	diffStmts   int
-	diffCovered int
-
-	// output
-	fileCoverages []FileCoverage
-	report        *Report
+	files, err := r.git.ChangedFiles(r.ctx, mb)
+	if err != nil {
+		return scope, fmt.Errorf("detecting changed files: %w", err)
+	}
+	scope.changedFiles = files
+	return scope, nil
 }
 
-func detectChangedFiles(s *runState) error {
-	s.gc = &git.Client{WorkDir: s.cfg.WorkDir}
-	root, err := s.gc.Root(s.ctx)
-	if err != nil {
-		return fmt.Errorf("finding git root: %w", err)
-	}
-	s.gitRoot = root
-
-	if err := s.gc.VerifyBranch(s.ctx, s.cfg.BaseBranch); err != nil {
-		return err
-	}
-
-	mb, err := s.gc.MergeBase(s.ctx, "HEAD", s.cfg.BaseBranch)
-	if err != nil {
-		return err
-	}
-	s.mergeBase = mb
-
-	files, err := s.gc.ChangedFiles(s.ctx, mb)
-	if err != nil {
-		return fmt.Errorf("detecting changed files: %w", err)
-	}
-	s.changedFiles = files
-
-	if len(files) == 0 {
-		s.report = &Report{DiffPassed: true, TotalPassed: true, OutputDir: s.outputDir}
-		s.done = true
-	}
-	return nil
-}
-
-func classifyFiles(s *runState) error {
-	for _, f := range s.changedFiles {
+func (r *runner) classifyFiles(scope coverageScope) (coverageSubjects, error) {
+	pkgCache := make(map[string]packages.ModulePackage)
+	var subjects coverageSubjects
+	for _, f := range scope.changedFiles {
 		fs := fileState{path: f}
-		absPath := filepath.Join(s.gitRoot, f)
+		absPath := filepath.Join(scope.repoRoot, f)
 
-		excl := classifyExclusion(f, absPath, s.excludeRes)
+		excl := classifyExclusion(f, absPath, r.excludeRes)
 		fs.excluded = excl.excluded
 		fs.funcExcluded = excl.funcExcluded
 
-		absDir := filepath.Join(s.gitRoot, filepath.Dir(f))
-		if info, err := packages.Lookup(s.ctx, s.gitRoot, absDir, s.pkgCache); err == nil {
+		absDir := filepath.Join(scope.repoRoot, filepath.Dir(f))
+		if info, err := packages.Lookup(r.ctx, scope.repoRoot, absDir, pkgCache); err == nil {
 			fs.profileKey = info.ImportPath + "/" + filepath.Base(f)
 			fs.pkg = info.ImportPath
 			fs.modRoot = info.ModuleRoot
 		}
 
-		s.allFiles = append(s.allFiles, fs)
+		subjects.files = append(subjects.files, fs)
 	}
-	return nil
+	return subjects, nil
 }
 
 // exclusion captures the per-file decision shared by diff and full modes.
@@ -204,7 +221,7 @@ type exclusion struct {
 	funcExcluded []directive.FuncSpan
 }
 
-// classifyExclusion applies the same exclusion logic that diff mode runs in
+// classifyExclusion applies the exclusion logic that diff mode runs in
 // classifyFiles, so full mode can honor ExcludeFiles regexes and
 // //covlens:ignore directives identically.
 //
@@ -229,12 +246,12 @@ func classifyExclusion(relPath, absPath string, excludeRes []*regexp.Regexp) exc
 	return e
 }
 
-func resolvePackages(s *runState) error {
-	// Reuse the lookups already performed in classifyFiles via s.pkgCache.
-	// No second `go list` round is needed — we just group.
+func (r *runner) resolvePackages(subjects coverageSubjects) coverageTargets {
+	// Reuses the lookups already performed in classifyFiles — no second
+	// `go list` round, just grouping.
 	var modPkgs []packages.ModulePackage
 	seen := make(map[string]bool)
-	for _, fs := range s.allFiles {
+	for _, fs := range subjects.files {
 		if fs.excluded || fs.modRoot == "" || fs.pkg == "" {
 			continue
 		}
@@ -248,139 +265,126 @@ func resolvePackages(s *runState) error {
 			ModuleRoot: fs.modRoot,
 		})
 	}
-	s.grouped = packages.GroupByModule(modPkgs)
+	grouped := packages.GroupByModule(modPkgs)
 
-	s.moduleRoots = make([]string, 0, len(s.grouped))
-	for root := range s.grouped {
-		s.moduleRoots = append(s.moduleRoots, root)
+	moduleRoots := make([]string, 0, len(grouped))
+	for root := range grouped {
+		moduleRoots = append(moduleRoots, root)
 	}
-	return nil
+	return coverageTargets{grouped: grouped, moduleRoots: moduleRoots}
 }
 
-func runCoverage(s *runState) error {
-	logProgress(s.cfg.stderr(), "Running total coverage...")
-	totalRes, err := coverage.RunTotal(s.ctx, s.moduleRoots, s.outputDir, s.cfg.testOutput())
-	if err != nil {
-		return fmt.Errorf("running total coverage: %w", err)
-	}
-	s.totalProfilePath = totalRes.ProfilePath
+func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) {
+	var profiles coverageProfiles
 
-	logProgress(s.cfg.stderr(), "Running diff coverage...")
-	diffRes, err := coverage.RunDiff(s.ctx, s.grouped, s.outputDir, s.cfg.testOutput())
+	logProgress(r.cfg.stderr(), "Running total coverage...")
+	totalRes, err := coverage.RunTotal(r.ctx, targets.moduleRoots, r.outputDir, r.cfg.testOutput())
 	if err != nil {
-		return fmt.Errorf("running diff coverage: %w", err)
+		return profiles, fmt.Errorf("running total coverage: %w", err)
 	}
-	s.diffProfilePath = diffRes.ProfilePath
-	return nil
+	profiles.totalProfilePath = totalRes.ProfilePath
+
+	logProgress(r.cfg.stderr(), "Running diff coverage...")
+	diffRes, err := coverage.RunDiff(r.ctx, targets.grouped, r.outputDir, r.cfg.testOutput())
+	if err != nil {
+		return profiles, fmt.Errorf("running diff coverage: %w", err)
+	}
+	profiles.diffProfilePath = diffRes.ProfilePath
+
+	parsed, err := cover.ParseProfiles(diffRes.ProfilePath)
+	if err != nil {
+		return profiles, fmt.Errorf("parsing diff coverage profile: %w", err)
+	}
+	profiles.diffProfiles = parsed
+	return profiles, nil
 }
 
-func computeCoverage(s *runState) error {
-	totalCov, err := coverage.TotalCoverage(s.totalProfilePath)
-	if err != nil {
-		return fmt.Errorf("parsing total coverage profile: %w", err)
-	}
-	s.totalCov = totalCov
+func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, targets coverageTargets, profiles coverageProfiles) (coverageStats, error) {
+	var stats coverageStats
 
-	if s.cfg.RatchetTotal {
-		logProgress(s.cfg.stderr(), "Computing baseline total coverage at merge-base...")
-		bc, err := baselineTotalCoverage(s.ctx, s.gc, s.mergeBase, s.gitRoot, s.moduleRoots, s.outputDir)
+	totalCov, err := coverage.TotalCoverage(profiles.totalProfilePath)
+	if err != nil {
+		return stats, fmt.Errorf("parsing total coverage profile: %w", err)
+	}
+	stats.totalCov = totalCov
+
+	if r.cfg.RatchetTotal {
+		logProgress(r.cfg.stderr(), "Computing baseline total coverage at merge-base...")
+		bc, err := r.baselineTotalCoverage(scope, targets)
 		if err != nil {
-			return fmt.Errorf("computing baseline coverage (required by --ratchet): %w", err)
+			return stats, fmt.Errorf("computing baseline coverage (required by --ratchet): %w", err)
 		}
-		s.baselineCov = bc
+		stats.baselineCov = bc
 	}
 
-	diffProfiles, err := cover.ParseProfiles(s.diffProfilePath)
-	if err != nil {
-		return fmt.Errorf("parsing diff coverage profile: %w", err)
-	}
-	s.diffProfiles = diffProfiles
+	stats.fileHunks = make(map[string][]git.Hunk)
+	excludedRanges := make(map[string][]git.Hunk)
 
-	s.fileHunks = make(map[string][]git.Hunk)
-	s.excludedRanges = make(map[string][]git.Hunk)
-
-	for _, fs := range s.allFiles {
+	for _, fs := range subjects.files {
 		if fs.excluded || fs.profileKey == "" {
 			continue
 		}
-		hunks, err := s.gc.DiffHunks(s.ctx, s.mergeBase, fs.path)
+		hunks, err := r.git.DiffHunks(r.ctx, scope.mergeBase, fs.path)
 		if err != nil {
-			return fmt.Errorf("computing diff hunks for %s: %w", fs.path, err)
+			return stats, fmt.Errorf("computing diff hunks for %s: %w", fs.path, err)
 		}
-		s.fileHunks[fs.profileKey] = hunks
+		stats.fileHunks[fs.profileKey] = hunks
 
 		for _, fn := range fs.funcExcluded {
-			s.excludedRanges[fs.profileKey] = append(
-				s.excludedRanges[fs.profileKey],
+			excludedRanges[fs.profileKey] = append(
+				excludedRanges[fs.profileKey],
 				git.Hunk{Start: fn.StartLine, End: fn.EndLine},
 			)
 		}
 	}
 
-	s.diffStmts, s.diffCovered, s.fileResults = coverage.FilteredCoverage(s.diffProfiles, s.fileHunks, s.excludedRanges)
-	if s.diffStmts > 0 {
-		s.diffCov = float64(s.diffCovered) / float64(s.diffStmts) * 100
+	stats.diffStmts, stats.diffCovered, stats.fileResults = coverage.FilteredCoverage(profiles.diffProfiles, stats.fileHunks, excludedRanges)
+	if stats.diffStmts > 0 {
+		stats.diffCov = float64(stats.diffCovered) / float64(stats.diffStmts) * 100
 	}
-	return nil
+	return stats, nil
 }
 
-func buildFileEntries(s *runState) error {
-	for _, fs := range s.allFiles {
+// buildReport shapes the compute results into the final *Report. It collapses
+// the former buildFileEntries / assembleReport / finalizeReport stages into
+// one pure formatting step.
+func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, profiles coverageProfiles, stats coverageStats) *Report {
+	files := make([]FileCoverage, 0, len(subjects.files))
+	for _, fs := range subjects.files {
 		fc := FileCoverage{
 			Path:    fs.path,
 			Package: fs.pkg,
 		}
-
 		if fs.excluded {
 			fc.Excluded = true
 			fc.Status = "excluded"
 			fc.Coverage = -1
-		} else if r, ok := s.fileResults[fs.profileKey]; ok {
-			fc.Statements = r.Stmts
-			fc.Covered = r.Covered
-			fc.Coverage = float64(r.Covered) / float64(r.Stmts) * 100
-			fc.Status = fileStatusFor(fc.Coverage, s.cfg.DiffThreshold)
+		} else if res, ok := stats.fileResults[fs.profileKey]; ok {
+			fc.Statements = res.Stmts
+			fc.Covered = res.Covered
+			fc.Coverage = float64(res.Covered) / float64(res.Stmts) * 100
+			fc.Status = fileStatusFor(fc.Coverage, r.cfg.DiffThreshold)
 		} else {
 			fc.Coverage = -1
 			fc.Status = "warn"
 		}
-
-		s.fileCoverages = append(s.fileCoverages, fc)
+		files = append(files, fc)
 	}
-	return nil
-}
 
-func assembleReport(s *runState) error {
-	totalPassed := s.totalCov >= s.cfg.TotalThreshold
-	if s.cfg.RatchetTotal && s.baselineCov > 0 {
+	totalPassed := stats.totalCov >= r.cfg.TotalThreshold
+	if r.cfg.RatchetTotal && stats.baselineCov > 0 {
 		// Pass if total coverage hasn't dropped by more than 0.1pp.
-		totalPassed = s.totalCov >= s.baselineCov-0.1
+		totalPassed = stats.totalCov >= stats.baselineCov-0.1
 	}
 	// If RatchetTotal is set but baseline could not be computed, fall through to threshold check.
 
-	s.report = &Report{
-		DiffCoverage:          s.diffCov,
-		TotalCoverage:         s.totalCov,
-		BaselineTotalCoverage: s.baselineCov,
-		DiffPassed:            s.diffCov >= s.cfg.DiffThreshold,
-		TotalPassed:           totalPassed,
-		Files:                 s.fileCoverages,
-		OutputDir:             s.outputDir,
-		SourceRoot:            s.gitRoot,
-	}
-	return nil
-}
-
-func finalizeReport(s *runState) error {
-	// Emit per-file raw rendering inputs for printers that want to render
-	// source views. The actual HTML rendering happens in the printer, not
-	// here — keeping covlens decoupled from any specific output format.
-	profileMap := make(map[string]*cover.Profile)
-	for _, p := range s.diffProfiles {
+	profileMap := make(map[string]*cover.Profile, len(profiles.diffProfiles))
+	for _, p := range profiles.diffProfiles {
 		profileMap[p.FileName] = p
 	}
 
-	for _, fs := range s.allFiles {
+	var sources []SourceData
+	for _, fs := range subjects.files {
 		if fs.excluded || fs.profileKey == "" {
 			continue
 		}
@@ -390,30 +394,44 @@ func finalizeReport(s *runState) error {
 		}
 
 		var hunks []Hunk
-		for _, h := range s.fileHunks[fs.profileKey] {
+		for _, h := range stats.fileHunks[fs.profileKey] {
 			hunks = append(hunks, Hunk{Start: h.Start, End: h.End})
 		}
 
-		s.report.Sources = append(s.report.Sources, SourceData{
+		sources = append(sources, SourceData{
 			Path:    fs.path,
 			Package: fs.pkg,
 			Blocks:  blocks,
 			Hunks:   hunks,
 		})
 	}
-	return nil
+
+	return &Report{
+		DiffCoverage:          stats.diffCov,
+		TotalCoverage:         stats.totalCov,
+		BaselineTotalCoverage: stats.baselineCov,
+		DiffPassed:            stats.diffCov >= r.cfg.DiffThreshold,
+		TotalPassed:           totalPassed,
+		Files:                 files,
+		OutputDir:             r.outputDir,
+		SourceRoot:            scope.repoRoot,
+		Sources:               sources,
+	}
 }
 
 // runFull runs a full-project coverage scan without requiring any git diff.
 // Every instrumented file is listed in the report with complete source view.
-func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*regexp.Regexp) (*Report, error) {
-	moduleRoots, err := findAllModuleRoots(cfg.WorkDir)
+// It does not use the diff-mode phase decomposition; the flow is short and
+// linear, and it shares only leaf helpers (classifyExclusion, fileStatusFor)
+// with the diff path.
+func (r *runner) runFull() (*Report, error) {
+	moduleRoots, err := findAllModuleRoots(r.cfg.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("finding module roots: %w", err)
 	}
 
-	logProgress(cfg.stderr(), "Running full coverage...")
-	totalRes, err := coverage.RunTotal(ctx, moduleRoots, outputDir, cfg.testOutput())
+	logProgress(r.cfg.stderr(), "Running full coverage...")
+	totalRes, err := coverage.RunTotal(r.ctx, moduleRoots, r.outputDir, r.cfg.testOutput())
 	if err != nil {
 		return nil, fmt.Errorf("running coverage: %w", err)
 	}
@@ -427,7 +445,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 		return nil, fmt.Errorf("parsing coverage profile blocks: %w", err)
 	}
 
-	modPathMap, err := buildModulePathMap(ctx, moduleRoots)
+	modPathMap, err := buildModulePathMap(r.ctx, moduleRoots)
 	if err != nil {
 		return nil, fmt.Errorf("building module path map: %w", err)
 	}
@@ -440,10 +458,10 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 		if absPath == "" {
 			continue
 		}
-		relPath, _ := filepath.Rel(cfg.WorkDir, absPath) // both paths are absolute; error only on Windows volume mismatch
+		relPath, _ := filepath.Rel(r.cfg.WorkDir, absPath) // both paths are absolute; error only on Windows volume mismatch
 		pkg := filepath.ToSlash(filepath.Dir(p.FileName))
 
-		excl := classifyExclusion(relPath, absPath, excludeRes)
+		excl := classifyExclusion(relPath, absPath, r.excludeRes)
 		if excl.excluded {
 			fileCoverages = append(fileCoverages, FileCoverage{
 				Path:     relPath,
@@ -474,7 +492,7 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 		if stmts > 0 {
 			cov = float64(covered) / float64(stmts) * 100
 		}
-		status := fileStatusFor(cov, cfg.TotalThreshold)
+		status := fileStatusFor(cov, r.cfg.TotalThreshold)
 
 		fileCoverages = append(fileCoverages, FileCoverage{
 			Path:       relPath,
@@ -494,16 +512,15 @@ func runFull(ctx context.Context, cfg Config, outputDir string, excludeRes []*re
 		})
 	}
 
-	r := &Report{
+	return &Report{
 		TotalCoverage: totalCov,
-		TotalPassed:   totalCov >= cfg.TotalThreshold,
+		TotalPassed:   totalCov >= r.cfg.TotalThreshold,
 		DiffPassed:    true,
 		Files:         fileCoverages,
 		Sources:       sources,
-		OutputDir:     outputDir,
-		SourceRoot:    cfg.WorkDir,
-	}
-	return r, nil
+		OutputDir:     r.outputDir,
+		SourceRoot:    r.cfg.WorkDir,
+	}, nil
 }
 
 // findAllModuleRoots walks dir and returns every directory containing a go.mod,
@@ -567,24 +584,24 @@ func resolveAbsPath(profileKey string, modPathMap map[string]string) string {
 	return ""
 }
 
-// baselineTotalCoverage checks out mergeBase into a temporary worktree,
+// baselineTotalCoverage checks out scope.mergeBase into a temporary worktree,
 // runs total coverage there, and returns the percentage.
-func baselineTotalCoverage(ctx context.Context, gc *git.Client, mergeBase, gitRoot string, moduleRoots []string, outputDir string) (float64, error) {
+func (r *runner) baselineTotalCoverage(scope coverageScope, targets coverageTargets) (float64, error) {
 	tmpDir, err := os.MkdirTemp("", "covlens-baseline-*")
 	if err != nil {
 		return 0, err
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err := gc.AddWorktree(ctx, tmpDir, mergeBase); err != nil {
+	if err := r.git.AddWorktree(r.ctx, tmpDir, scope.mergeBase); err != nil {
 		return 0, err
 	}
-	defer gc.RemoveWorktree(tmpDir)
+	defer r.git.RemoveWorktree(tmpDir)
 
 	// Translate each module root to its equivalent path inside the worktree.
-	baseRoots := make([]string, len(moduleRoots))
-	for i, root := range moduleRoots {
-		rel, err := filepath.Rel(gitRoot, root)
+	baseRoots := make([]string, len(targets.moduleRoots))
+	for i, root := range targets.moduleRoots {
+		rel, err := filepath.Rel(scope.repoRoot, root)
 		if err != nil {
 			return 0, err
 		}
@@ -597,7 +614,7 @@ func baselineTotalCoverage(ctx context.Context, gc *git.Client, mergeBase, gitRo
 	}
 	defer os.RemoveAll(baseOutputDir)
 
-	res, err := coverage.RunTotal(ctx, baseRoots, baseOutputDir, io.Discard)
+	res, err := coverage.RunTotal(r.ctx, baseRoots, baseOutputDir, io.Discard)
 	if err != nil {
 		return 0, err
 	}
