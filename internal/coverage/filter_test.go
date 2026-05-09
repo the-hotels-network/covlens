@@ -3,7 +3,6 @@ package coverage
 import (
 	"testing"
 
-	"github.com/erioch/covlens/internal/git"
 	"golang.org/x/tools/cover"
 )
 
@@ -20,7 +19,7 @@ func TestFilteredCoverage_BlockInsideHunk(t *testing.T) {
 		FileName: "pkg/foo.go",
 		Blocks:   []cover.ProfileBlock{block(10, 15, 3, 1)},
 	}}
-	hunks := map[string][]git.Hunk{"pkg/foo.go": {{Start: 8, End: 20}}}
+	hunks := map[string][]LineRange{"pkg/foo.go": {{Start: 8, End: 20}}}
 	stmts, covered, _ := FilteredCoverage(profiles, hunks, nil)
 	if stmts != 3 || covered != 3 {
 		t.Errorf("got stmts=%d covered=%d, want 3, 3", stmts, covered)
@@ -32,7 +31,7 @@ func TestFilteredCoverage_BlockOutsideAllHunks(t *testing.T) {
 		FileName: "pkg/foo.go",
 		Blocks:   []cover.ProfileBlock{block(50, 60, 5, 1)},
 	}}
-	hunks := map[string][]git.Hunk{"pkg/foo.go": {{Start: 1, End: 10}}}
+	hunks := map[string][]LineRange{"pkg/foo.go": {{Start: 1, End: 10}}}
 	stmts, covered, _ := FilteredCoverage(profiles, hunks, nil)
 	if stmts != 0 || covered != 0 {
 		t.Errorf("got stmts=%d covered=%d, want 0, 0", stmts, covered)
@@ -44,7 +43,7 @@ func TestFilteredCoverage_BlockPartiallyOverlapping(t *testing.T) {
 		FileName: "pkg/foo.go",
 		Blocks:   []cover.ProfileBlock{block(8, 12, 2, 1)},
 	}}
-	hunks := map[string][]git.Hunk{"pkg/foo.go": {{Start: 10, End: 20}}}
+	hunks := map[string][]LineRange{"pkg/foo.go": {{Start: 10, End: 20}}}
 	stmts, covered, _ := FilteredCoverage(profiles, hunks, nil)
 	if stmts != 2 || covered != 2 {
 		t.Errorf("got stmts=%d covered=%d, want 2, 2", stmts, covered)
@@ -56,8 +55,8 @@ func TestFilteredCoverage_BlockInsideExcludedRange(t *testing.T) {
 		FileName: "pkg/foo.go",
 		Blocks:   []cover.ProfileBlock{block(10, 15, 3, 1)},
 	}}
-	hunks := map[string][]git.Hunk{"pkg/foo.go": {{Start: 1, End: 50}}}
-	excluded := map[string][]git.Hunk{"pkg/foo.go": {{Start: 8, End: 20}}}
+	hunks := map[string][]LineRange{"pkg/foo.go": {{Start: 1, End: 50}}}
+	excluded := map[string][]LineRange{"pkg/foo.go": {{Start: 8, End: 20}}}
 	stmts, covered, _ := FilteredCoverage(profiles, hunks, excluded)
 	if stmts != 0 || covered != 0 {
 		t.Errorf("got stmts=%d covered=%d, want 0, 0", stmts, covered)
@@ -69,7 +68,7 @@ func TestFilteredCoverage_UncoveredBlockInHunk(t *testing.T) {
 		FileName: "pkg/foo.go",
 		Blocks:   []cover.ProfileBlock{block(10, 15, 4, 0)},
 	}}
-	hunks := map[string][]git.Hunk{"pkg/foo.go": {{Start: 1, End: 50}}}
+	hunks := map[string][]LineRange{"pkg/foo.go": {{Start: 1, End: 50}}}
 	stmts, covered, _ := FilteredCoverage(profiles, hunks, nil)
 	if stmts != 4 || covered != 0 {
 		t.Errorf("got stmts=%d covered=%d, want 4, 0", stmts, covered)
@@ -88,7 +87,7 @@ func TestFilteredCoverage_NoHunksForFile(t *testing.T) {
 		FileName: "pkg/bar.go",
 		Blocks:   []cover.ProfileBlock{block(1, 10, 5, 5)},
 	}}
-	hunks := map[string][]git.Hunk{"pkg/other.go": {{Start: 1, End: 100}}}
+	hunks := map[string][]LineRange{"pkg/other.go": {{Start: 1, End: 100}}}
 	stmts, covered, _ := FilteredCoverage(profiles, hunks, nil)
 	if stmts != 0 || covered != 0 {
 		t.Errorf("got stmts=%d covered=%d, want 0, 0", stmts, covered)
@@ -100,7 +99,7 @@ func TestFilteredCoverage_PerFileResult(t *testing.T) {
 		{FileName: "pkg/a.go", Blocks: []cover.ProfileBlock{block(1, 5, 3, 1)}},
 		{FileName: "pkg/b.go", Blocks: []cover.ProfileBlock{block(1, 5, 2, 0)}},
 	}
-	hunks := map[string][]git.Hunk{
+	hunks := map[string][]LineRange{
 		"pkg/a.go": {{Start: 1, End: 10}},
 		"pkg/b.go": {{Start: 1, End: 10}},
 	}
@@ -122,9 +121,53 @@ func TestFilteredCoverage_MultipleBlocksMixed(t *testing.T) {
 			block(50, 60, 4, 1), // outside hunk
 		},
 	}}
-	hunks := map[string][]git.Hunk{"pkg/foo.go": {{Start: 1, End: 25}}}
+	hunks := map[string][]LineRange{"pkg/foo.go": {{Start: 1, End: 25}}}
 	stmts, covered, _ := FilteredCoverage(profiles, hunks, nil)
 	if stmts != 5 || covered != 2 {
 		t.Errorf("got stmts=%d covered=%d, want 5, 2", stmts, covered)
+	}
+}
+
+func TestInRange_InsideRange(t *testing.T) {
+	ranges := []LineRange{{Start: 5, End: 15}, {Start: 20, End: 25}}
+	if !InRange(ranges, 8, 12) {
+		t.Error("InRange: expected true for span fully inside a range")
+	}
+}
+
+func TestInRange_OutsideAllRanges(t *testing.T) {
+	ranges := []LineRange{{Start: 5, End: 15}, {Start: 20, End: 25}}
+	if InRange(ranges, 16, 19) {
+		t.Error("InRange: expected false for span between ranges")
+	}
+}
+
+func TestInRange_PartialOverlap(t *testing.T) {
+	ranges := []LineRange{{Start: 5, End: 15}, {Start: 20, End: 25}}
+	if !InRange(ranges, 12, 18) {
+		t.Error("InRange: expected true for span partially overlapping a range")
+	}
+}
+
+func TestInRange_ExactBoundary(t *testing.T) {
+	ranges := []LineRange{{Start: 5, End: 15}}
+	if !InRange(ranges, 5, 5) {
+		t.Error("InRange: expected true for span at range start boundary")
+	}
+	if !InRange(ranges, 15, 15) {
+		t.Error("InRange: expected true for span at range end boundary")
+	}
+}
+
+func TestInRange_Empty(t *testing.T) {
+	if InRange(nil, 1, 10) {
+		t.Error("InRange: expected false for nil ranges")
+	}
+}
+
+func TestInRange_SpanningMultipleRanges(t *testing.T) {
+	ranges := []LineRange{{Start: 5, End: 10}, {Start: 20, End: 25}}
+	if !InRange(ranges, 1, 30) {
+		t.Error("InRange: expected true for span covering multiple ranges")
 	}
 }

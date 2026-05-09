@@ -152,7 +152,7 @@ type coverageStats struct {
 	totalCov, diffCov, baselineCov float64
 	diffStmts, diffCovered         int
 	fileResults                    map[string]coverage.FileResult
-	fileHunks                      map[string][]git.Hunk
+	fileHunks                      map[string][]coverage.LineRange
 }
 
 // fileState tracks per-file metadata produced by classifyFiles.
@@ -317,8 +317,8 @@ func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, ta
 		stats.baselineCov = bc
 	}
 
-	stats.fileHunks = make(map[string][]git.Hunk)
-	excludedRanges := make(map[string][]git.Hunk)
+	stats.fileHunks = make(map[string][]coverage.LineRange)
+	excludedRanges := make(map[string][]coverage.LineRange)
 
 	for _, fs := range subjects.files {
 		if fs.excluded || fs.profileKey == "" {
@@ -328,12 +328,16 @@ func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, ta
 		if err != nil {
 			return stats, fmt.Errorf("computing diff hunks for %s: %w", fs.path, err)
 		}
-		stats.fileHunks[fs.profileKey] = hunks
+		ranges := make([]coverage.LineRange, len(hunks))
+		for i, h := range hunks {
+			ranges[i] = coverage.LineRange{Start: h.Start, End: h.End}
+		}
+		stats.fileHunks[fs.profileKey] = ranges
 
 		for _, fn := range fs.funcExcluded {
 			excludedRanges[fs.profileKey] = append(
 				excludedRanges[fs.profileKey],
-				git.Hunk{Start: fn.StartLine, End: fn.EndLine},
+				coverage.LineRange{Start: fn.StartLine, End: fn.EndLine},
 			)
 		}
 	}
@@ -473,14 +477,14 @@ func (r *runner) runFull() (*Report, error) {
 			continue
 		}
 
-		var excludedRanges []git.Hunk
+		var excludedRanges []coverage.LineRange
 		for _, fn := range excl.funcExcluded {
-			excludedRanges = append(excludedRanges, git.Hunk{Start: fn.StartLine, End: fn.EndLine})
+			excludedRanges = append(excludedRanges, coverage.LineRange{Start: fn.StartLine, End: fn.EndLine})
 		}
 
 		var stmts, covered int
 		for _, b := range p.Blocks {
-			if len(excludedRanges) > 0 && git.InRange(excludedRanges, b.StartLine, b.EndLine) {
+			if len(excludedRanges) > 0 && coverage.InRange(excludedRanges, b.StartLine, b.EndLine) {
 				continue
 			}
 			stmts += b.NumStmt

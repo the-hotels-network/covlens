@@ -58,13 +58,3 @@ func MergeHunks(hunks []Hunk) []Hunk {
 	}
 	return merged
 }
-
-// InRange returns true if any hunk overlaps the range [start, end].
-func InRange(hunks []Hunk, start, end int) bool {
-	for _, h := range hunks {
-		if start <= h.End && end >= h.Start {
-			return true
-		}
-	}
-	return false
-}
