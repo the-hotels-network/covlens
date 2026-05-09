@@ -12,7 +12,7 @@ import (
 	"golang.org/x/tools/cover"
 	"golang.org/x/tools/txtar"
 
-	"github.com/erioch/covlens"
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 var update = flag.Bool("update", false, "regenerate golden output inside txtar fixtures")

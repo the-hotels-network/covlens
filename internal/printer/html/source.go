@@ -14,7 +14,7 @@ import (
 	"github.com/alecthomas/chroma/v2/styles"
 	"golang.org/x/tools/cover"
 
-	"github.com/erioch/covlens"
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 const contextLines = 3

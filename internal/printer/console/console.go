@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/erioch/covlens"
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 const (

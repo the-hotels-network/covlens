@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/erioch/covlens"
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 // TestLoadConfig_FlatYAMLBackwardCompat verifies that an existing covlens.yaml

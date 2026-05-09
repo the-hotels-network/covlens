@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/erioch/covlens"
-	"github.com/erioch/covlens/printers/console"
-	"github.com/erioch/covlens/printers/html"
-	"github.com/erioch/covlens/printers/json"
+	"github.com/erioch/covlens/internal/covlens"
+	"github.com/erioch/covlens/internal/printer/console"
+	"github.com/erioch/covlens/internal/printer/html"
+	"github.com/erioch/covlens/internal/printer/json"
 )
 
 func main() {

@@ -1,7 +1,7 @@
 package coverage
 
 import (
-	"github.com/erioch/covlens/git"
+	"github.com/erioch/covlens/internal/git"
 	"golang.org/x/tools/cover"
 )
 

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/erioch/covlens"
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 // fileSummary is the per-file row in the report table (template-only).

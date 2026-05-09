@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/tools/txtar"
 
-	"github.com/erioch/covlens"
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 // TestRun_DiffCoverage builds a real git repo from a txtar fixture (main →

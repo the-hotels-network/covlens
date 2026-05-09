@@ -96,28 +96,6 @@ func main() {
 }
 ```
 
-## Use as a library
-
-```go
-import (
-    "context"
-    "fmt"
-    "log"
-
-    "github.com/erioch/covlens"
-)
-
-cfg := covlens.DefaultConfig()
-cfg.WorkDir = "."          // path to the git repo to analyze
-cfg.DiffThreshold = 90
-
-report, err := covlens.Run(context.Background(), cfg)
-if err != nil {
-    log.Fatal(err)
-}
-fmt.Printf("Diff coverage: %.1f%%\n", report.DiffCoverage)
-```
-
 ## CI example (GitHub Actions)
 
 ```yaml

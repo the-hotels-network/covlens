@@ -14,10 +14,10 @@ import (
 
 	"golang.org/x/tools/cover"
 
-	"github.com/erioch/covlens/coverage"
-	"github.com/erioch/covlens/directive"
-	"github.com/erioch/covlens/git"
-	"github.com/erioch/covlens/packages"
+	"github.com/erioch/covlens/internal/coverage"
+	"github.com/erioch/covlens/internal/directive"
+	"github.com/erioch/covlens/internal/git"
+	"github.com/erioch/covlens/internal/packages"
 )
 
 // Run executes a coverage analysis and returns the resulting report.
