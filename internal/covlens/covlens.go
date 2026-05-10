@@ -93,10 +93,7 @@ func (r *runner) run() (*Report, error) {
 		return r.emptyReport(), nil
 	}
 
-	subjects, err := r.classifyFiles(scope)
-	if err != nil {
-		return nil, err
-	}
+	subjects := r.classifyFiles(scope)
 
 	targets := r.resolvePackages(subjects)
 
@@ -192,7 +189,13 @@ func (r *runner) detectChangedFiles() (coverageScope, error) {
 	return scope, nil
 }
 
-func (r *runner) classifyFiles(scope coverageScope) (coverageSubjects, error) {
+func (r *runner) classifyFiles(scope coverageScope) coverageSubjects {
+	// packages.Lookup failures are intentionally swallowed: files outside any
+	// resolvable module (deleted, generated outside the build, etc.) still
+	// appear in the report with empty profile keys so downstream stages can
+	// mark them as "no data" rather than dropping them silently. The signature
+	// has no error return because there is no failure path the caller can
+	// usefully act on.
 	pkgCache := make(map[string]packages.ModulePackage)
 	var subjects coverageSubjects
 	for _, f := range scope.changedFiles {
@@ -212,7 +215,7 @@ func (r *runner) classifyFiles(scope coverageScope) (coverageSubjects, error) {
 
 		subjects.files = append(subjects.files, fs)
 	}
-	return subjects, nil
+	return subjects
 }
 
 // exclusion captures the per-file decision shared by diff and full modes.
