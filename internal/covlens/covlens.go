@@ -156,6 +156,7 @@ type coverageStats struct {
 type fileState struct {
 	path         string
 	excluded     bool
+	deleted      bool                 // file was removed in this diff; no on-disk source to render
 	profileKey   string               // "import/path/file.go"
 	pkg          string               // import path of the package
 	modRoot      string               // absolute path to the owning module's go.mod directory
@@ -191,16 +192,26 @@ func (r *runner) detectChangedFiles() (coverageScope, error) {
 
 func (r *runner) classifyFiles(scope coverageScope) coverageSubjects {
 	// packages.Lookup failures are intentionally swallowed: files outside any
-	// resolvable module (deleted, generated outside the build, etc.) still
-	// appear in the report with empty profile keys so downstream stages can
-	// mark them as "no data" rather than dropping them silently. The signature
-	// has no error return because there is no failure path the caller can
-	// usefully act on.
+	// resolvable module still appear in the report with empty profile keys so
+	// downstream stages can mark them as "no data" rather than dropping them
+	// silently. The signature has no error return because there is no failure
+	// path the caller can usefully act on.
 	pkgCache := make(map[string]packages.ModulePackage)
 	var subjects coverageSubjects
 	for _, f := range scope.changedFiles {
 		fs := fileState{path: f}
 		absPath := filepath.Join(scope.repoRoot, f)
+
+		// Detect deletions early: the file appears in the git diff but no
+		// longer exists in the working tree. Downstream stages skip these
+		// — there are no profile blocks to filter, no source to render —
+		// but classifyExclusion / packages.Lookup are also unsafe to run
+		// on a missing path.
+		if _, err := os.Stat(absPath); err != nil {
+			fs.deleted = true
+			subjects.files = append(subjects.files, fs)
+			continue
+		}
 
 		excl := classifyExclusion(f, absPath, r.excludeRes)
 		fs.excluded = excl.excluded
@@ -328,7 +339,7 @@ func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, ta
 	excludedRanges := make(map[string][]coverage.LineRange)
 
 	for _, fs := range subjects.files {
-		if fs.excluded || fs.profileKey == "" {
+		if fs.excluded || fs.deleted || fs.profileKey == "" {
 			continue
 		}
 		hunks, err := r.git.DiffHunks(r.ctx, scope.mergeBase, fs.path)
@@ -362,6 +373,13 @@ func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, ta
 func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, profiles coverageProfiles, stats coverageStats) *Report {
 	files := make([]FileCoverage, 0, len(subjects.files))
 	for _, fs := range subjects.files {
+		// Deleted files don't appear in the report: there's no source to
+		// render and no current coverage to measure. They show up in the
+		// diff for accounting reasons; covlens isn't the right tool to
+		// surface "you deleted this." (git already does.)
+		if fs.deleted {
+			continue
+		}
 		fc := FileCoverage{
 			Path:    fs.path,
 			Package: fs.pkg,
@@ -396,7 +414,7 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 
 	var sources []SourceData
 	for _, fs := range subjects.files {
-		if fs.excluded || fs.profileKey == "" {
+		if fs.excluded || fs.deleted || fs.profileKey == "" {
 			continue
 		}
 		var blocks []cover.ProfileBlock

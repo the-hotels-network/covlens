@@ -212,6 +212,80 @@ func TestRun_FullMode_HonorsExclusions(t *testing.T) {
 	}
 }
 
+// TestRun_DiffMode_DeletedFileExcluded guards the regression discovered when
+// running covlens on a branch that deletes a Go file: the deleted path was
+// being added to Report.Sources, which then caused HTML rendering to fail
+// when the printer tried to read the (now-missing) source from disk.
+//
+// After the fix, deleted files appear in neither Files nor Sources — covlens
+// doesn't try to render coverage for code that no longer exists.
+func TestRun_DiffMode_DeletedFileExcluded(t *testing.T) {
+	requireExecutables(t, "git", "go")
+
+	dir := t.TempDir()
+	env := isolatedGitEnv()
+	runGit := gitRunner(t, dir, env)
+	write := fileWriter(t, dir)
+
+	// base: foo.go (with Foo) + foo_test.go (testing Foo).
+	runGit("init", "-b", "main")
+	write("go.mod", "module example.com/del\n\ngo 1.21\n")
+	write("foo.go", "package foo\n\nfunc Foo() int { return 1 }\n")
+	write("foo_test.go", "package foo\n\nimport \"testing\"\n\nfunc TestFoo(t *testing.T) {\n\tif Foo() != 1 { t.Fail() }\n}\n")
+	runGit("add", ".")
+	runGit("commit", "-m", "base")
+
+	// feature: delete foo.go, rewrite foo_test.go so the module still
+	// compiles, and add bar.go so there's a non-deletion changed file too.
+	runGit("checkout", "-b", "feature")
+	if err := os.Remove(filepath.Join(dir, "foo.go")); err != nil {
+		t.Fatal(err)
+	}
+	write("foo_test.go", "package foo\n\nimport \"testing\"\n\nfunc TestBar(t *testing.T) { _ = Bar() }\n")
+	write("bar.go", "package foo\n\nfunc Bar() int { return 2 }\n")
+	runGit("add", "-A")
+	runGit("commit", "-m", "delete foo, add bar")
+
+	cfg := covlens.DefaultConfig()
+	cfg.WorkDir = dir
+	cfg.HTML.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
+	cfg.DiffThreshold = 0
+	cfg.TotalThreshold = 0
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	report, err := covlens.Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	for _, fc := range report.Files {
+		if fc.Path == "foo.go" {
+			t.Errorf("deleted foo.go unexpectedly appears in report.Files: %+v", fc)
+		}
+	}
+	for _, s := range report.Sources {
+		if s.Path == "foo.go" {
+			t.Errorf("deleted foo.go unexpectedly appears in report.Sources: %+v", s)
+		}
+	}
+
+	// Sanity: bar.go should still show up (it's a normal added file).
+	var foundBar bool
+	for _, fc := range report.Files {
+		if fc.Path == "bar.go" {
+			foundBar = true
+			break
+		}
+	}
+	if !foundBar {
+		t.Errorf("expected bar.go in report.Files; got %d entries", len(report.Files))
+	}
+}
+
 func keysOf(m map[string]covlens.FileCoverage) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
