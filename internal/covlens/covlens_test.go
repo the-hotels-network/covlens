@@ -198,6 +198,18 @@ func TestRun_FullMode_HonorsExclusions(t *testing.T) {
 	if foo.Coverage < 99 {
 		t.Errorf("foo.go: Coverage = %.1f%%, want 100%%", foo.Coverage)
 	}
+
+	// Total coverage must reflect exclusions: only foo.go (100%) and
+	// partial.go's Counted() function (100%) should contribute. mocks_foo.go,
+	// foo_gen.go, and skipme.go are excluded entirely; partial.go's
+	// IgnoredFunc is subtracted. So aggregate total should be 100%.
+	//
+	// Pre-fix, TotalCoverage was computed via coverage.TotalCoverage on the
+	// raw profile, ignoring all exclusions — so users who excluded mocks
+	// would still see their threshold dragged down by the mocks' 0%.
+	if report.TotalCoverage < 99 {
+		t.Errorf("TotalCoverage = %.1f%%, want 100%% (excluded files must not count toward total)", report.TotalCoverage)
+	}
 }
 
 func keysOf(m map[string]covlens.FileCoverage) []string {

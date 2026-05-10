@@ -302,11 +302,15 @@ func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) 
 func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, targets coverageTargets, profiles coverageProfiles) (coverageStats, error) {
 	var stats coverageStats
 
-	totalCov, err := coverage.TotalCoverage(profiles.totalProfilePath)
+	totalProfiles, err := cover.ParseProfiles(profiles.totalProfilePath)
 	if err != nil {
 		return stats, fmt.Errorf("parsing total coverage profile: %w", err)
 	}
-	stats.totalCov = totalCov
+	modPathMap, err := buildModulePathMap(r.ctx, targets.moduleRoots)
+	if err != nil {
+		return stats, fmt.Errorf("building module path map: %w", err)
+	}
+	stats.totalCov = aggregateFiltered(totalProfiles, r.regexExcluder(modPathMap, r.cfg.WorkDir))
 
 	if r.cfg.RatchetTotal {
 		logProgress(r.cfg.stderr(), "Computing baseline total coverage at merge-base...")
@@ -440,10 +444,6 @@ func (r *runner) runFull() (*Report, error) {
 		return nil, fmt.Errorf("running coverage: %w", err)
 	}
 
-	totalCov, err := coverage.TotalCoverage(totalRes.ProfilePath)
-	if err != nil {
-		return nil, fmt.Errorf("parsing coverage profile: %w", err)
-	}
 	totalProfiles, err := cover.ParseProfiles(totalRes.ProfilePath)
 	if err != nil {
 		return nil, fmt.Errorf("parsing coverage profile blocks: %w", err)
@@ -456,6 +456,7 @@ func (r *runner) runFull() (*Report, error) {
 
 	var fileCoverages []FileCoverage
 	var sources []SourceData
+	var totalStmts, totalCovered int
 
 	for _, p := range totalProfiles {
 		absPath := resolveAbsPath(p.FileName, modPathMap)
@@ -492,6 +493,9 @@ func (r *runner) runFull() (*Report, error) {
 				covered += b.NumStmt
 			}
 		}
+		totalStmts += stmts
+		totalCovered += covered
+
 		var cov float64 = -1
 		if stmts > 0 {
 			cov = float64(covered) / float64(stmts) * 100
@@ -514,6 +518,11 @@ func (r *runner) runFull() (*Report, error) {
 			Blocks:  p.Blocks,
 			Hunks:   nil,
 		})
+	}
+
+	var totalCov float64
+	if totalStmts > 0 {
+		totalCov = float64(totalCovered) / float64(totalStmts) * 100
 	}
 
 	return &Report{
@@ -622,7 +631,19 @@ func (r *runner) baselineTotalCoverage(scope coverageScope, targets coverageTarg
 	if err != nil {
 		return 0, err
 	}
-	return coverage.TotalCoverage(res.ProfilePath)
+	profiles, err := cover.ParseProfiles(res.ProfilePath)
+	if err != nil {
+		return 0, err
+	}
+	baseModPathMap, err := buildModulePathMap(r.ctx, baseRoots)
+	if err != nil {
+		return 0, err
+	}
+	// Filter against tmpDir-rooted paths so the user's exclude patterns
+	// (which target git-relative paths) match correctly: at merge-base, the
+	// equivalent file lives at tmpDir/<git-rel-path>. Filtering keeps the
+	// baseline comparable to the current run, which also filters.
+	return aggregateFiltered(profiles, r.regexExcluder(baseModPathMap, tmpDir)), nil
 }
 
 func fileStatusFor(cov, threshold float64) string {
@@ -633,6 +654,55 @@ func fileStatusFor(cov, threshold float64) string {
 		return "ok"
 	}
 	return "fail"
+}
+
+// aggregateFiltered sums covered/total statements across profiles, skipping
+// any profile for which excluded returns true. Returns the resulting coverage
+// percentage (or 0 if no statements remained after filtering).
+func aggregateFiltered(profiles []*cover.Profile, excluded func(profileFileName string) bool) float64 {
+	var stmts, covered int64
+	for _, p := range profiles {
+		if excluded(p.FileName) {
+			continue
+		}
+		for _, b := range p.Blocks {
+			stmts += int64(b.NumStmt)
+			if b.Count > 0 {
+				covered += int64(b.NumStmt)
+			}
+		}
+	}
+	if stmts == 0 {
+		return 0
+	}
+	return float64(covered) / float64(stmts) * 100
+}
+
+// regexExcluder returns a predicate suitable for aggregateFiltered that
+// reports whether a profile's file (resolved via modPathMap and made
+// relative to workDir) matches any of the runner's ExcludeFiles regexes.
+//
+// Limitation: only file-level regex exclusions are honored here, not
+// //covlens:ignore directives. Honoring directives would require parsing
+// every Go source file in the project, which is prohibitively expensive
+// when the only output we need is an aggregate number. runFull already
+// applies directives via its per-file iteration; this helper covers the
+// diff-mode total and the baseline-at-merge-base comparison, where the
+// file-level regex case is dominant.
+func (r *runner) regexExcluder(modPathMap map[string]string, workDir string) func(string) bool {
+	return func(profileFileName string) bool {
+		absPath := resolveAbsPath(profileFileName, modPathMap)
+		if absPath == "" {
+			return true // unresolvable paths can't be checked; skip them from the total
+		}
+		relPath, _ := filepath.Rel(workDir, absPath)
+		for _, re := range r.excludeRes {
+			if re.MatchString(relPath) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 func logProgress(w io.Writer, msg string) {
