@@ -39,6 +39,7 @@ show_excluded: true
 #
 # Examples:
 #   exclude_files:
+#     - "main\\.go$"        # `package main` entry points (typically untestable)
 #     - "_mock\\.go$"       # generated mocks
 #     - "_gen\\.go$"        # generated code
 #     - "^vendor/"          # vendored dependencies

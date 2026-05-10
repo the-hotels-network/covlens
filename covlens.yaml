@@ -1,0 +1,16 @@
+# covlens config for the covlens project itself.
+# All other fields fall back to defaults — see example/covlens.yaml for the
+# full reference.
+
+# Browser auto-opening.
+auto_open: false
+
+# `package main` entry points (cmd/covlens/main.go) — typically untestable
+exclude_files:
+  - "main\\.go$"
+
+# Minimum coverage percentage required for the lines you changed.
+diff_threshold: 90
+
+# Minimum coverage percentage required for the entire project (all packages).
+total_threshold: 80
