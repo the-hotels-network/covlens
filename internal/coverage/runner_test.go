@@ -194,3 +194,29 @@ func TestProfileWritten(t *testing.T) {
 		t.Error("profileWritten: expected true for non-empty file")
 	}
 }
+
+func TestMergeProfiles(t *testing.T) {
+	dir := t.TempDir()
+	p1 := filepath.Join(dir, "a.out")
+	p2 := filepath.Join(dir, "b.out")
+	if err := os.WriteFile(p1, []byte("mode: atomic\npkg/a.go:1.1,5.1 2 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p2, []byte("mode: atomic\npkg/b.go:1.1,5.1 3 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "merged.out")
+	if err := MergeProfiles(dst, []string{p1, p2}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(dst)
+	content := string(data)
+	if count := strings.Count(content, "mode:"); count != 1 {
+		t.Errorf("expected 1 mode header, got %d", count)
+	}
+	if !strings.Contains(content, "pkg/a.go") || !strings.Contains(content, "pkg/b.go") {
+		t.Error("merged profile missing file data")
+	}
+}
