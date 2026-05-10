@@ -74,8 +74,10 @@ func main() {
 
 	// JSON sidecar for CI consumers — always written so a parser can rely
 	// on the file existing whenever covlens completed successfully.
-	if _, err := writeJSONReport(report, cfg, htmlPath); err != nil {
+	jsonPath, err := writeJSONReport(report, cfg, htmlPath)
+	if err != nil {
 		console.Error(os.Stderr, "failed to generate JSON report: %v", err)
+		jsonPath = ""
 	}
 
 	if len(report.Files) == 0 {
@@ -86,10 +88,13 @@ func main() {
 	console.PrintSummary(os.Stdout, report, cfg)
 
 	if htmlPath != "" {
-		console.Info(os.Stdout, "Report: "+htmlPath)
+		console.Info(os.Stdout, "HTML report: "+htmlPath)
 		if cfg.HTML.AutoOpen {
 			openBrowser(htmlPath)
 		}
+	}
+	if jsonPath != "" {
+		console.Info(os.Stdout, "JSON report: "+jsonPath)
 	}
 
 	if !report.DiffPassed || !report.TotalPassed {
