@@ -35,6 +35,9 @@ covlens --base-branch develop
 # Don't open the report automatically
 covlens --no-open
 
+# Scan the whole project — no diff, every file is measured
+covlens --full
+
 # Use a custom config file
 covlens --config path/to/covlens.yaml
 ```
@@ -64,12 +67,14 @@ total_threshold: 70
 output_dir: .coverage
 auto_open: true
 show_excluded: true
+theme: auto         # "auto", "light", or "dark"
 
 # Exclude files matching any of these regexps
 exclude_files:
-  - "_mock\\.go$"
-  - "^vendor/"
-  - "generated"
+  - "main\\.go$"     # `package main` entry points (typically untestable CLI plumbing)
+  - "_mock\\.go$"    # generated mocks
+  - "^vendor/"       # vendored dependencies
+  - "generated"      # any file with "generated" in its path
 ```
 
 See [`example/covlens.yaml`](example/covlens.yaml) for a fully annotated reference.
@@ -95,6 +100,35 @@ func main() {
     ...
 }
 ```
+
+## Output
+
+Every run writes its artifacts under `output_dir` (default: `.coverage/`):
+
+- `coverage_report.html` — self-contained HTML report (skip with `--no-html`)
+- `coverage_report.json` — machine-readable sidecar, always written when covlens succeeds
+- `coverage.out`, `coverage_diff.out` — raw Go coverage profiles (kept for re-use; safe to delete)
+
+The JSON sidecar is the integration point for CI tooling. Key fields:
+
+```json
+{
+  "schema": "1",
+  "mode": "diff",
+  "diffCoverage": 92.5,
+  "totalCoverage": 78.4,
+  "diffThreshold": 80,
+  "totalThreshold": 70,
+  "diffPassed": true,
+  "totalPassed": true,
+  "htmlReportPath": "/abs/path/to/coverage_report.html",
+  "files": [
+    { "path": "pkg/foo.go", "coverage": 92.5, "status": "ok", "statements": 12, "covered": 11 }
+  ]
+}
+```
+
+`schema` is bumped on breaking changes; new fields are additive. The full type lives in `internal/printer/json`.
 
 ## CI example (GitHub Actions)
 
