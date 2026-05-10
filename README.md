@@ -130,16 +130,32 @@ The JSON sidecar is the integration point for CI tooling. Key fields:
 
 `schema` is bumped on breaking changes; new fields are additive. The full type lives in `internal/printer/json`.
 
-## CI example (GitHub Actions)
+## CI example (CircleCI)
 
 ```yaml
-- name: Coverage check
-  run: |
-    go install github.com/erioch/covlens/cmd/covlens@latest
-    covlens --no-open
+version: 2.1
+jobs:
+  coverage:
+    docker:
+      - image: cimg/go:1.25
+    steps:
+      - checkout
+      - run:
+          name: Coverage check
+          command: |
+            go install github.com/erioch/covlens/cmd/covlens@latest
+            covlens --no-open
+      - store_artifacts:
+          path: .coverage/
+          destination: coverage
+workflows:
+  test:
+    jobs: [coverage]
 ```
 
-The process exits 1 when a threshold is not met, which fails the step.
+The process exits 1 when a threshold is not met, which fails the job. `store_artifacts`
+makes the HTML report and JSON sidecar available in the CircleCI UI under the build's
+Artifacts tab.
 
 ## Multi-module repos
 
