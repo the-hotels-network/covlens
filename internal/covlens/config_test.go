@@ -148,6 +148,25 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// TestLoadConfig_MalformedYAML asserts that a syntactically broken config file
+// surfaces a wrapped error tagged "parsing config:" instead of silently
+// returning defaults. Defaults-on-error would mask user typos.
+func TestLoadConfig_MalformedYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "covlens.yaml")
+	// Mapping value where a scalar is expected → YAML parse error.
+	if err := os.WriteFile(path, []byte("diff_threshold: {oops\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := covlens.LoadConfig(path)
+	if err == nil {
+		t.Fatal("LoadConfig: got nil, want parse error")
+	}
+	if !strings.Contains(err.Error(), "parsing config") {
+		t.Errorf("error message missing 'parsing config': %v", err)
+	}
+}
+
 // TestLoadConfig_MissingFileReturnsDefaults makes sure removing the file
 // doesn't error and returns the expected default Config (including the
 // default HTML sub-struct values).
