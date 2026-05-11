@@ -126,6 +126,7 @@ func TestPrintSummary_Ratchet_WithBaseline_DidNotDrop(t *testing.T) {
 
 	assertContainsAll(t, buf.String(),
 		"Total coverage:", "78.50%", "baseline: 78.00%",
+		"Δ +0.50pp", // delta carries an explicit sign and "pp" suffix
 		"Total coverage did not drop",
 	)
 	// "threshold:" still appears for the diff section; only the total section
@@ -145,6 +146,7 @@ func TestPrintSummary_Ratchet_WithBaseline_Dropped(t *testing.T) {
 
 	assertContainsAll(t, buf.String(),
 		"baseline: 78.00%",
+		"Δ -8.00pp",
 		"Total coverage dropped vs base branch",
 	)
 }

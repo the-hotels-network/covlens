@@ -33,7 +33,19 @@ func PrintSummary(out io.Writer, r *covlens.Report, cfg covlens.Config) {
 
 	// Total coverage.
 	if cfg.RatchetTotal && r.BaselineTotalCoverage > 0 {
-		fmt.Fprintf(out, "  %-30s %.2f%% (baseline: %.2f%%)\n", "Total coverage:", r.TotalCoverage, r.BaselineTotalCoverage)
+		delta := r.TotalCoverage - r.BaselineTotalCoverage
+		// Color the delta to give an at-a-glance signal: green when
+		// coverage rose, red when it fell, neutral within the ±0.01pp band
+		// that's effectively a wash.
+		deltaColor := cReset
+		if delta > 0.01 {
+			deltaColor = cGreen
+		} else if delta < -0.01 {
+			deltaColor = cRed
+		}
+		fmt.Fprintf(out, "  %-30s %.2f%% (baseline: %.2f%%, %sΔ %+.2fpp%s)\n",
+			"Total coverage:", r.TotalCoverage, r.BaselineTotalCoverage,
+			deltaColor, delta, cReset)
 		if r.TotalPassed {
 			fmt.Fprintf(out, "  %s✔%s  Total coverage did not drop\n", cGreen, cReset)
 		} else {
