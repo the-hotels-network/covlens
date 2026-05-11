@@ -2,14 +2,43 @@ package coverage
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+// missingToolRe matches `go: no such tool "<name>"` lines that Go emits when
+// `go test` tries to invoke a toolchain tool (typically covdata, in our case)
+// that is absent from the active toolchain's tool dir. Auto-downloaded
+// toolchains often ship a minimal toolset missing these, causing this exact
+// error pattern.
+var missingToolRe = regexp.MustCompile(`go: no such tool "([^"]+)"`)
+
+// classifyMissingTool returns the missing tool name (e.g., "covdata") if the
+// captured `go test` output contains the marker pattern, or "" otherwise.
+func classifyMissingTool(combined []byte) string {
+	m := missingToolRe.FindSubmatch(combined)
+	if m == nil {
+		return ""
+	}
+	return string(m[1])
+}
+
+// missingToolHint returns a user-actionable error message when a Go toolchain
+// tool is missing during coverage instrumentation. Centralized so both
+// RunTotal and RunDiff produce the same guidance.
+func missingToolHint(tool, root string) error {
+	return fmt.Errorf("Go toolchain is missing %q (required for coverage instrumentation in %s). "+
+		"This typically means Go's auto-toolchain downloaded a minimal toolset that excludes "+
+		"standalone tools. Upgrade your system Go to match the project's go.mod toolchain "+
+		"directive, or set GOTOOLCHAIN=local to use the system Go directly", tool, root)
+}
 
 // RunResult holds the outcome of a multi-module coverage run.
 type RunResult struct {
@@ -41,10 +70,16 @@ func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, outpu
 		cmd := exec.CommandContext(ctx, "go", "test", "-short",
 			"-coverprofile="+prof, "-covermode=atomic", "./...")
 		cmd.Dir = root
-		cmd.Stdout = output
-		cmd.Stderr = output
+		var capture bytes.Buffer
+		cmd.Stdout = io.MultiWriter(output, &capture)
+		cmd.Stderr = io.MultiWriter(output, &capture)
 		runErr := cmd.Run()
 
+		if runErr != nil {
+			if tool := classifyMissingTool(capture.Bytes()); tool != "" {
+				return res, missingToolHint(tool, root)
+			}
+		}
 		if runErr != nil && !profileWritten(prof) {
 			compileFailures = append(compileFailures, fmt.Sprintf("%s: %v", root, runErr))
 			continue
@@ -92,10 +127,16 @@ func RunDiff(ctx context.Context, grouped map[string][]string, outputDir string,
 		args = append(args, pkgs...)
 		cmd := exec.CommandContext(ctx, "go", args...)
 		cmd.Dir = root
-		cmd.Stdout = output
-		cmd.Stderr = output
+		var capture bytes.Buffer
+		cmd.Stdout = io.MultiWriter(output, &capture)
+		cmd.Stderr = io.MultiWriter(output, &capture)
 		runErr := cmd.Run()
 
+		if runErr != nil {
+			if tool := classifyMissingTool(capture.Bytes()); tool != "" {
+				return res, missingToolHint(tool, root)
+			}
+		}
 		if runErr != nil && !profileWritten(prof) {
 			compileFailures = append(compileFailures, fmt.Sprintf("%s: %v", root, runErr))
 			continue

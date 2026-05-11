@@ -168,6 +168,47 @@ func TestRunDiff_TestFailure_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestClassifyMissingTool(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "covdata missing — typical go test output",
+			in:   "# example.com/foo\ngo: no such tool \"covdata\"\nFAIL\n",
+			want: "covdata",
+		},
+		{
+			name: "different tool missing",
+			in:   `go: no such tool "pprof"`,
+			want: "pprof",
+		},
+		{
+			name: "no marker → empty",
+			in:   "--- FAIL: TestFoo (0.01s)\n    foo_test.go:5: bad\nFAIL\n",
+			want: "",
+		},
+		{
+			name: "empty input → empty",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "prose containing 'no such tool' doesn't false-positive",
+			in:   "warning: no such tool here, just narrative text",
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyMissingTool([]byte(tc.in)); got != tc.want {
+				t.Errorf("classifyMissingTool(...) = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestProfileWritten(t *testing.T) {
 	dir := t.TempDir()
 
