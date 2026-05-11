@@ -167,6 +167,33 @@ covlens always passes `-short` to `go test`. Tests that opt in via `if testing.S
 
 To run everything (including `-short`-gated tests), invoke `go test ./...` directly instead of going through covlens.
 
+### Recommended layout for e2e tests
+
+For a cleaner separation, put your end-to-end tests in a dedicated sub-package and short-circuit the whole package with `TestMain` instead of sprinkling `t.Skip()` calls across each test:
+
+```go
+// internal/myapp/e2e/main_test.go
+package e2e
+
+import (
+    "flag"
+    "os"
+    "testing"
+)
+
+func TestMain(m *testing.M) {
+    flag.Parse()
+    if testing.Short() {
+        os.Exit(0)
+    }
+    os.Exit(m.Run())
+}
+```
+
+Every test in the `e2e` package now skips under `-short` automatically — new e2e tests need no boilerplate. To run them, invoke `go test ./...` from your repo root (covlens itself uses this layout; see `internal/covlens/e2e/`).
+
+If your e2e-heavy files have no meaningful unit-test seam without a deeper refactor, list them in `exclude_files` so they don't drag the total coverage number down — see [Ignoring files and functions](#ignoring-files-and-functions).
+
 ## How diff coverage is calculated
 
 For each changed file, covlens:
