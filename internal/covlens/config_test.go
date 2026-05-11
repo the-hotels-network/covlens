@@ -54,8 +54,8 @@ exclude_files:
 	if cfg.HTML.Theme != "dark" {
 		t.Errorf("HTML.Theme = %q, want %q", cfg.HTML.Theme, "dark")
 	}
-	if !cfg.HTML.ShowExcluded {
-		t.Error("HTML.ShowExcluded = false, want true")
+	if !cfg.ShowExcluded {
+		t.Error("ShowExcluded = false, want true")
 	}
 
 	if len(cfg.ExcludeFiles) != 1 || cfg.ExcludeFiles[0] != `_gen\.go$` {

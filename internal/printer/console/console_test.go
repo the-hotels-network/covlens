@@ -186,7 +186,7 @@ func TestPrintSummary_NoFiles_SkipsFilesSection(t *testing.T) {
 }
 
 func TestPrintSummary_FileStatuses(t *testing.T) {
-	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, ShowExcluded: true}
 	report := &covlens.Report{
 		DiffPassed: true, TotalPassed: true,
 		Files: []covlens.FileCoverage{
@@ -206,6 +206,26 @@ func TestPrintSummary_FileStatuses(t *testing.T) {
 		"mocks.go", "(excluded)",
 		"unknown.go", "(no data)",
 	)
+}
+
+// TestPrintSummary_HidesExcludedWhenConfigured asserts that ShowExcluded=false
+// suppresses excluded files from the per-file breakdown. Non-excluded files
+// still render. JSON sidecar is unaffected (tested separately) — this hide
+// behavior is a console/HTML presentation concern only.
+func TestPrintSummary_HidesExcludedWhenConfigured(t *testing.T) {
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70} // ShowExcluded zero = false
+	report := &covlens.Report{
+		DiffPassed: true, TotalPassed: true,
+		Files: []covlens.FileCoverage{
+			{Path: "kept.go", Coverage: 90, Status: "ok"},
+			{Path: "mocks.go", Coverage: -1, Excluded: true, Status: "excluded"},
+		},
+	}
+	var buf bytes.Buffer
+	console.PrintSummary(&buf, report, cfg)
+
+	assertContainsAll(t, buf.String(), "kept.go")
+	assertNotContains(t, buf.String(), "mocks.go", "(excluded)")
 }
 
 func TestInfo(t *testing.T) {

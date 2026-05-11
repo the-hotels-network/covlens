@@ -65,6 +65,9 @@ func PrintSummary(out io.Writer, r *covlens.Report, cfg covlens.Config) {
 	if len(r.Files) > 0 {
 		fmt.Fprintf(out, "  %sFiles:%s\n", cBold, cReset)
 		for _, f := range r.Files {
+			if f.Excluded && !cfg.ShowExcluded {
+				continue
+			}
 			switch f.Status {
 			case "ok":
 				fmt.Fprintf(out, "    %s✔%s %-50s %s%.1f%%%s\n", cGreen, cReset, f.Path, cGreen, f.Coverage, cReset)

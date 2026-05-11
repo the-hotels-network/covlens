@@ -127,7 +127,7 @@ func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 		DiffThreshold:         cfg.DiffThreshold,
 		TotalThreshold:        cfg.TotalThreshold,
 		BaseBranch:            cfg.BaseBranch,
-		ShowExcluded:          cfg.HTML.ShowExcluded,
+		ShowExcluded:          cfg.ShowExcluded,
 		RatchetTotal:          cfg.RatchetTotal,
 		Theme:                 cfg.HTML.Theme,
 		FullMode:              cfg.FullMode,

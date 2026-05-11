@@ -21,12 +21,18 @@ type Config struct {
 	// rather than comparing against the fixed TotalThreshold.
 	RatchetTotal bool `yaml:"ratchet_total"`
 
+	// ShowExcluded controls whether excluded files appear in the console
+	// summary and HTML report. The JSON sidecar always includes them so
+	// machine consumers see the complete set regardless of this flag.
+	// Default: true.
+	ShowExcluded bool `yaml:"show_excluded"`
+
 	FullMode bool   `yaml:"-"` // set by --full CLI flag, not persisted to config
 	WorkDir  string `yaml:"-"`
 
 	// HTML groups settings that only matter when consuming the HTML report.
 	// Inlined into the YAML schema so existing covlens.yaml files keep working
-	// (auto_open / show_excluded / theme stay at the top level).
+	// (auto_open / theme stay at the top level).
 	HTML HTMLConfig `yaml:",inline"`
 
 	// Stderr receives covlens progress lines (e.g. "▶ Running total coverage...").
@@ -40,8 +46,7 @@ type Config struct {
 // HTMLConfig holds presentation-only settings used by the HTML printer.
 // Library users who never render HTML can leave the zero value.
 type HTMLConfig struct {
-	AutoOpen     bool `yaml:"auto_open"`
-	ShowExcluded bool `yaml:"show_excluded"`
+	AutoOpen bool `yaml:"auto_open"`
 	// Theme sets the default theme for the HTML report: "auto", "light", or "dark".
 	// "auto" follows the OS preference. Users can always override via the in-page toggle.
 	Theme string `yaml:"theme"`
@@ -68,10 +73,10 @@ func DefaultConfig() Config {
 		DiffThreshold:  80,
 		TotalThreshold: 70,
 		OutputDir:      ".coverage",
+		ShowExcluded:   true,
 		HTML: HTMLConfig{
-			AutoOpen:     true,
-			ShowExcluded: true,
-			Theme:        "auto",
+			AutoOpen: true,
+			Theme:    "auto",
 		},
 	}
 }

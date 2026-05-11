@@ -188,10 +188,10 @@ func TestGenerate_ShowExcludedAffectsFileCount(t *testing.T) {
 	}
 
 	cfgHidden := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
-	cfgHidden.HTML.ShowExcluded = false
+	cfgHidden.ShowExcluded = false
 
 	cfgShown := cfgHidden
-	cfgShown.HTML.ShowExcluded = true
+	cfgShown.ShowExcluded = true
 
 	r := &covlens.Report{DiffPassed: true, TotalPassed: true, Files: files}
 
