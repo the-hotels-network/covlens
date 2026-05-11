@@ -158,15 +158,18 @@ func (r *runner) resolvePackages(subjects coverageSubjects) coverageTargets {
 func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) {
 	var profiles coverageProfiles
 
+	testOut, closeLog := r.openTestOutputLog()
+	defer closeLog()
+
 	logProgress(r.cfg.stderr(), "Running total coverage...")
-	totalRes, err := coverage.RunTotal(r.ctx, targets.moduleRoots, r.outputDir, r.cfg.testOutput())
+	totalRes, err := coverage.RunTotal(r.ctx, targets.moduleRoots, r.outputDir, testOut)
 	if err != nil {
 		return profiles, fmt.Errorf("running total coverage: %w", err)
 	}
 	profiles.totalProfilePath = totalRes.ProfilePath
 
 	logProgress(r.cfg.stderr(), "Running diff coverage...")
-	diffRes, err := coverage.RunDiff(r.ctx, targets.grouped, r.outputDir, r.cfg.testOutput())
+	diffRes, err := coverage.RunDiff(r.ctx, targets.grouped, r.outputDir, testOut)
 	if err != nil {
 		return profiles, fmt.Errorf("running diff coverage: %w", err)
 	}

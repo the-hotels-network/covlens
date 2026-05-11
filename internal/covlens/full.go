@@ -25,8 +25,11 @@ func (r *runner) runFull() (*Report, error) {
 		return nil, fmt.Errorf("finding module roots: %w", err)
 	}
 
+	testOut, closeLog := r.openTestOutputLog()
+	defer closeLog()
+
 	logProgress(r.cfg.stderr(), "Running full coverage...")
-	totalRes, err := coverage.RunTotal(r.ctx, moduleRoots, r.outputDir, r.cfg.testOutput())
+	totalRes, err := coverage.RunTotal(r.ctx, moduleRoots, r.outputDir, testOut)
 	if err != nil {
 		return nil, fmt.Errorf("running coverage: %w", err)
 	}

@@ -22,6 +22,12 @@ total_threshold: 70
 # Created automatically if it doesn't exist.
 output_dir: .coverage
 
+# Stream raw `go test` stdout/stderr to the terminal. When false (default),
+# test output is captured to <output_dir>/test-output.log and only the
+# covlens progress summary appears on the console — much quieter for large
+# projects. Enable for debugging or when you want live test feedback in CI.
+verbose_tests: false
+
 # Open the HTML report in the default browser after a successful run.
 # Disable in CI by setting this to false or passing --no-open.
 auto_open: true

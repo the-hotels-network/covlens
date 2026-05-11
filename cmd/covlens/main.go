@@ -25,6 +25,8 @@ func main() {
 	ratchet := flag.Bool("ratchet", false, "Fail only if total coverage drops vs base branch")
 	full := flag.Bool("full", false, "Full project scan: show coverage for all files, no diff required")
 	configPath := flag.String("config", "covlens.yaml", "Path to config file")
+	verbose := flag.Bool("verbose", false, "Stream `go test` output to stdout (default: capture to .coverage/test-output.log)")
+	flag.BoolVar(verbose, "v", false, "shorthand for --verbose")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -52,6 +54,8 @@ func main() {
 			cfg.RatchetTotal = *ratchet
 		case "full":
 			cfg.FullMode = *full
+		case "verbose", "v":
+			cfg.VerboseTests = *verbose
 		}
 	})
 
