@@ -1,9 +1,11 @@
 package covlens
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"golang.org/x/tools/cover"
@@ -107,6 +109,21 @@ func TestAggregateFiltered(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestLogProgress(t *testing.T) {
+	var buf bytes.Buffer
+	logProgress(&buf, "running tests")
+	out := buf.String()
+	if !strings.Contains(out, "running tests") {
+		t.Errorf("output missing message: %q", out)
+	}
+	if !strings.Contains(out, "▶") {
+		t.Errorf("output missing ▶ marker: %q", out)
+	}
+	if !strings.HasSuffix(out, "\n") {
+		t.Errorf("output not newline-terminated: %q", out)
 	}
 }
 
