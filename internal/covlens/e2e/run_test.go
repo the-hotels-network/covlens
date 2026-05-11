@@ -1,4 +1,4 @@
-package covlens_test
+package e2e
 
 import (
 	"context"

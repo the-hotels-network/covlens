@@ -5,7 +5,7 @@ Go coverage tool that runs tests only on packages you changed and validates thre
 ## What it does
 
 1. Finds all `.go` files changed relative to your base branch (committed, staged, and untracked)
-2. Runs `go test -coverprofile` on those packages
+2. Runs `go test -short -coverprofile` on those packages (tests guarded by `testing.Short()` are skipped — see [Test selection](#test-selection))
 3. Computes coverage for **the changed lines only** (not the whole file)
 4. Validates two thresholds and exits 1 if either fails — CI-friendly
 5. Generates a self-contained HTML report with syntax highlighting, a file sidebar, dark mode, and jump-to-uncovered
@@ -160,6 +160,12 @@ Artifacts tab.
 ## Multi-module repos
 
 covlens walks up the directory tree from each changed file to find the nearest `go.mod`, so monorepos with multiple modules work without any configuration.
+
+## Test selection
+
+covlens always passes `-short` to `go test`. Tests that opt in via `if testing.Short() { t.Skip() }` — typically slow integration or end-to-end suites — are skipped, and therefore do not contribute to coverage. Keep this in mind when calibrating thresholds: the coverage number reflects what your fast suite protects, not your full test matrix.
+
+To run everything (including `-short`-gated tests), invoke `go test ./...` directly instead of going through covlens.
 
 ## How diff coverage is calculated
 
