@@ -20,6 +20,8 @@ go install github.com/erioch/covlens/cmd/covlens@latest
 Requires Go 1.25+, `git`, and `go` on your PATH. (Go's auto-toolchain feature means
 `go install` from an older Go version will automatically download the 1.25 toolchain.)
 
+**Heads-up**: Go's auto-toolchain downloads omit `covdata`, which `go test -coverprofile` needs. If your system Go is older than your project's `go.mod` `go` directive, you'll see a "missing covdata" error. Install a matching system Go (from [go.dev/dl/](https://go.dev/dl/) or `brew install go`) so auto-toolchain doesn't trigger.
+
 ## Usage
 
 ```sh
