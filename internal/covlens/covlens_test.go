@@ -286,6 +286,56 @@ func TestRun_DiffMode_DeletedFileExcluded(t *testing.T) {
 	}
 }
 
+// TestRun_RatchetTotal_FailsOnRegression covers the --ratchet path
+// (baselineTotalCoverage): when total coverage drops vs the merge-base,
+// the gate must fail even if the current value clears the absolute
+// TotalThreshold. The runner checks out merge-base into a temp worktree,
+// re-runs `go test -coverprofile` there, and compares.
+//
+// Without this test, internal/covlens/baseline.go is unexercised by E2E.
+func TestRun_RatchetTotal_FailsOnRegression(t *testing.T) {
+	requireExecutables(t, "git", "go")
+
+	repo := setupTxtarRepo(t, "testdata/repos/ratchet_drop.txtar")
+
+	cfg := covlens.DefaultConfig()
+	cfg.WorkDir = repo
+	cfg.HTML.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
+	cfg.DiffThreshold = 0  // diff is uncovered (new Bar); not what we're testing
+	cfg.TotalThreshold = 40 // current 50% clears this — only ratchet should trip
+	cfg.RatchetTotal = true
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	report, err := covlens.Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if report == nil {
+		t.Fatal("Run returned nil report")
+	}
+
+	if report.BaselineTotalCoverage < 99 {
+		t.Errorf("BaselineTotalCoverage = %.1f%%, want ~100%% (merge-base had Foo fully tested)",
+			report.BaselineTotalCoverage)
+	}
+	if report.TotalCoverage < 40 || report.TotalCoverage > 60 {
+		t.Errorf("TotalCoverage = %.1f%%, want ~50%% (Foo covered, Bar not)",
+			report.TotalCoverage)
+	}
+	if report.TotalCoverage >= report.BaselineTotalCoverage {
+		t.Errorf("expected TotalCoverage (%.1f) < BaselineTotalCoverage (%.1f) — fixture should produce a regression",
+			report.TotalCoverage, report.BaselineTotalCoverage)
+	}
+	if report.TotalPassed {
+		t.Errorf("TotalPassed = true, want false — ratchet should fail when total drops from %.1f%% to %.1f%%",
+			report.BaselineTotalCoverage, report.TotalCoverage)
+	}
+}
+
 func keysOf(m map[string]covlens.FileCoverage) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

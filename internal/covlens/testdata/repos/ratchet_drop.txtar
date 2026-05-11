@@ -1,0 +1,29 @@
+Two-branch repo: main has Foo fully tested (100% total); feature adds an
+uncovered Bar, dropping total coverage to 50%. Exercises --ratchet: the gate
+should fail because total coverage regressed vs the merge-base, even though
+50% is above an absolute TotalThreshold of 40%.
+
+-- base/go.mod --
+module example.com/ratchet
+
+go 1.21
+-- base/foo.go --
+package foo
+
+func Foo() int { return 1 }
+-- base/foo_test.go --
+package foo
+
+import "testing"
+
+func TestFoo(t *testing.T) {
+	if Foo() != 1 {
+		t.Fail()
+	}
+}
+-- head/foo.go --
+package foo
+
+func Foo() int { return 1 }
+
+func Bar() int { return 2 }
