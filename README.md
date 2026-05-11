@@ -51,9 +51,10 @@ covlens --config path/to/covlens.yaml
 | `--total-threshold` | `70` | Minimum coverage % for the whole project |
 | `--output-dir` | `.coverage` | Directory for profiles, HTML report, and JSON sidecar |
 | `--no-open` | false | Skip auto-opening the report in the browser |
+| `--open` | false | Force opening the report in the browser (overrides `auto_open: false` in config) |
 | `--no-html` | false | Skip HTML generation entirely (implies `--no-open`); JSON sidecar is still written |
 | `--ratchet` | false | Replace `--total-threshold` with a "must not drop vs. base branch" check |
-| `--full` | false | Skip the diff and report coverage for every file in the project |
+| `--full` (`-f`) | false | Skip the diff and report coverage for every file in the project |
 | `--verbose` (`-v`) | false | Stream `go test` output to stdout (default: capture to `.coverage/test-output.log`) |
 | `--config` | `covlens.yaml` | Path to config file |
 

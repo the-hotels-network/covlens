@@ -24,6 +24,8 @@ func main() {
 	noHTML := flag.Bool("no-html", false, "Skip HTML report generation entirely (implies --no-open)")
 	ratchet := flag.Bool("ratchet", false, "Fail only if total coverage drops vs base branch")
 	full := flag.Bool("full", false, "Full project scan: show coverage for all files, no diff required")
+	flag.BoolVar(full, "f", false, "shorthand for --full")
+	open := flag.Bool("open", false, "Force opening the report in the browser (overrides auto_open: false in config)")
 	configPath := flag.String("config", "covlens.yaml", "Path to config file")
 	verbose := flag.Bool("verbose", false, "Stream `go test` output to stdout (default: capture to .coverage/test-output.log)")
 	flag.BoolVar(verbose, "v", false, "shorthand for --verbose")
@@ -50,9 +52,11 @@ func main() {
 			cfg.OutputDir = *outputDir
 		case "no-open":
 			cfg.HTML.AutoOpen = !*noOpen
+		case "open":
+			cfg.HTML.AutoOpen = *open
 		case "ratchet":
 			cfg.RatchetTotal = *ratchet
-		case "full":
+		case "full", "f":
 			cfg.FullMode = *full
 		case "verbose", "v":
 			cfg.VerboseTests = *verbose
