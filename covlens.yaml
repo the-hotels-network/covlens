@@ -2,8 +2,9 @@
 # All other fields fall back to defaults — see example/covlens.yaml for the
 # full reference.
 
-# Browser auto-opening.
-auto_open: false
+html:
+  # Browser auto-opening.
+  auto_open: false
 
 exclude_files:
   # cmd/covlens/main.go — `package main` entry point, typically untestable.

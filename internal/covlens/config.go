@@ -38,9 +38,7 @@ type Config struct {
 	WorkDir  string `yaml:"-"`
 
 	// HTML groups settings that only matter when consuming the HTML report.
-	// Inlined into the YAML schema so existing covlens.yaml files keep working
-	// (auto_open / theme stay at the top level).
-	HTML HTMLConfig `yaml:",inline"`
+	HTML HTMLConfig `yaml:"html"`
 
 	// Stderr receives covlens progress lines (e.g. "▶ Running total coverage...").
 	// Defaults to os.Stderr. Set to io.Discard to silence.

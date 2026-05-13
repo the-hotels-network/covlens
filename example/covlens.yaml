@@ -28,10 +28,6 @@ output_dir: .coverage
 # projects. Enable for debugging or when you want live test feedback in CI.
 verbose_tests: false
 
-# Open the HTML report in the default browser after a successful run.
-# Disable in CI by setting this to false or passing --no-open.
-auto_open: true
-
 # Show excluded files in the HTML report with a grey "excluded" badge.
 # Set to false to hide them entirely.
 show_excluded: true
@@ -61,8 +57,14 @@ exclude_files: []
 # Falls back to total_threshold if the baseline cannot be computed (e.g. first run).
 ratchet_total: false
 
-# Default theme for the HTML report: "auto", "light", or "dark".
-# "auto" follows the OS/browser preference (default).
-# Users can always switch themes via the in-page toggle; their choice is saved
-# in localStorage and overrides this setting on subsequent opens.
-theme: auto
+# HTML report settings.
+html:
+  # Open the HTML report in the default browser after a successful run.
+  # Disable in CI by setting this to false or passing --no-open.
+  auto_open: true
+
+  # Default theme: "auto", "light", or "dark".
+  # "auto" follows the OS/browser preference (default).
+  # Users can always switch themes via the in-page toggle; their choice is saved
+  # in localStorage and overrides this setting on subsequent opens.
+  theme: auto

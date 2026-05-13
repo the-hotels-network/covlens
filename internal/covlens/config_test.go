@@ -9,23 +9,22 @@ import (
 	"github.com/erioch/covlens/internal/covlens"
 )
 
-// TestLoadConfig_FlatYAMLBackwardCompat verifies that an existing covlens.yaml
-// using the pre-refactor flat schema (auto_open / theme / show_excluded at top
-// level) still parses correctly after those fields moved into the HTML
-// sub-struct. The yaml:",inline" tag on Config.HTML is what makes this work.
-func TestLoadConfig_FlatYAMLBackwardCompat(t *testing.T) {
+// TestLoadConfig_ParsesHTMLBlock verifies that auto_open and theme are parsed
+// from the html: sub-key in covlens.yaml.
+func TestLoadConfig_ParsesHTMLBlock(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "covlens.yaml")
 	yaml := `base_branch: develop
 diff_threshold: 90
 total_threshold: 80
 output_dir: out
-auto_open: false
-theme: dark
 show_excluded: true
 ratchet_total: true
 exclude_files:
   - "_gen\\.go$"
+html:
+  auto_open: false
+  theme: dark
 `
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
@@ -45,11 +44,8 @@ exclude_files:
 	if !cfg.RatchetTotal {
 		t.Error("RatchetTotal = false, want true")
 	}
-
-	// The three fields that moved into HTMLConfig must still be parsed from
-	// their flat top-level keys.
 	if cfg.HTML.AutoOpen {
-		t.Error("HTML.AutoOpen = true, want false (yaml said auto_open: false)")
+		t.Error("HTML.AutoOpen = true, want false")
 	}
 	if cfg.HTML.Theme != "dark" {
 		t.Errorf("HTML.Theme = %q, want %q", cfg.HTML.Theme, "dark")
@@ -57,7 +53,6 @@ exclude_files:
 	if !cfg.ShowExcluded {
 		t.Error("ShowExcluded = false, want true")
 	}
-
 	if len(cfg.ExcludeFiles) != 1 || cfg.ExcludeFiles[0] != `_gen\.go$` {
 		t.Errorf("ExcludeFiles = %v, want [_gen\\.go$]", cfg.ExcludeFiles)
 	}
