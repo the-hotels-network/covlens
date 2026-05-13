@@ -24,6 +24,7 @@ func main() {
 	noOpen := flag.Bool("no-open", false, "Don't open report in browser (overrides auto_open: true in config)")
 	noHTML := flag.Bool("no-html", false, "Skip HTML report generation entirely (implies --no-open)")
 	ratchet := flag.Bool("ratchet", false, "Fail only if total coverage drops vs base branch")
+	flag.BoolVar(ratchet, "r", false, "shorthand for --ratchet")
 	full := flag.Bool("full", false, "Full project scan: show coverage for all files, no diff required")
 	flag.BoolVar(full, "f", false, "shorthand for --full")
 	configPath := flag.String("config", "covlens.yaml", "Path to config file")
@@ -54,7 +55,7 @@ func main() {
 			cfg.HTML.AutoOpen = !*noOpen
 		case "open":
 			cfg.HTML.AutoOpen = *open
-		case "ratchet":
+		case "ratchet", "r":
 			cfg.RatchetTotal = *ratchet
 		case "full", "f":
 			cfg.FullMode = *full
