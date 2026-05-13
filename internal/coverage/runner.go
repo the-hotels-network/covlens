@@ -46,6 +46,23 @@ type RunResult struct {
 	ProfilePath string
 }
 
+// runModule executes `go test` for a single module root and reports the outcome.
+// tool is non-empty when the run failed because a required toolchain tool is absent;
+// callers should propagate that as an immediate error via missingToolHint.
+func runModule(ctx context.Context, root string, goTestArgs []string, profPath string, output io.Writer) (written bool, tool string, err error) {
+	cmd := exec.CommandContext(ctx, "go", goTestArgs...)
+	cmd.Dir = root
+	var capture bytes.Buffer
+	cmd.Stdout = io.MultiWriter(output, &capture)
+	cmd.Stderr = io.MultiWriter(output, &capture)
+	err = cmd.Run()
+	if err != nil {
+		tool = classifyMissingTool(capture.Bytes())
+	}
+	written = profileWritten(profPath)
+	return
+}
+
 // RunTotal runs `go test -short -coverprofile -covermode=atomic ./...` in each
 // module root and returns the merged coverage profile.
 //
@@ -67,20 +84,12 @@ func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, outpu
 
 	for i, root := range moduleRoots {
 		prof := filepath.Join(outputDir, fmt.Sprintf("total_%d.out", i))
-		cmd := exec.CommandContext(ctx, "go", "test", "-short",
-			"-coverprofile="+prof, "-covermode=atomic", "./...")
-		cmd.Dir = root
-		var capture bytes.Buffer
-		cmd.Stdout = io.MultiWriter(output, &capture)
-		cmd.Stderr = io.MultiWriter(output, &capture)
-		runErr := cmd.Run()
-
-		if runErr != nil {
-			if tool := classifyMissingTool(capture.Bytes()); tool != "" {
-				return res, missingToolHint(tool, root)
-			}
+		args := []string{"test", "-short", "-coverprofile=" + prof, "-covermode=atomic", "./..."}
+		written, tool, runErr := runModule(ctx, root, args, prof, output)
+		if tool != "" {
+			return res, missingToolHint(tool, root)
 		}
-		if runErr != nil && !profileWritten(prof) {
+		if runErr != nil && !written {
 			compileFailures = append(compileFailures, fmt.Sprintf("%s: %v", root, runErr))
 			continue
 		}
@@ -121,23 +130,13 @@ func RunDiff(ctx context.Context, grouped map[string][]string, outputDir string,
 		prof := filepath.Join(outputDir, fmt.Sprintf("diff_%d.out", i))
 		i++
 		covPkg := strings.Join(pkgs, ",")
-		args := []string{"test", "-short",
-			"-coverprofile=" + prof, "-covermode=atomic",
-			"-coverpkg=" + covPkg}
+		args := []string{"test", "-short", "-coverprofile=" + prof, "-covermode=atomic", "-coverpkg=" + covPkg}
 		args = append(args, pkgs...)
-		cmd := exec.CommandContext(ctx, "go", args...)
-		cmd.Dir = root
-		var capture bytes.Buffer
-		cmd.Stdout = io.MultiWriter(output, &capture)
-		cmd.Stderr = io.MultiWriter(output, &capture)
-		runErr := cmd.Run()
-
-		if runErr != nil {
-			if tool := classifyMissingTool(capture.Bytes()); tool != "" {
-				return res, missingToolHint(tool, root)
-			}
+		written, tool, runErr := runModule(ctx, root, args, prof, output)
+		if tool != "" {
+			return res, missingToolHint(tool, root)
 		}
-		if runErr != nil && !profileWritten(prof) {
+		if runErr != nil && !written {
 			compileFailures = append(compileFailures, fmt.Sprintf("%s: %v", root, runErr))
 			continue
 		}
