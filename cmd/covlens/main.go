@@ -125,48 +125,7 @@ func writeHTMLReport(r *covlens.Report, cfg covlens.Config) (string, error) {
 // writeJSONReport renders the machine-readable JSON sidecar and returns its path.
 func writeJSONReport(r *covlens.Report, cfg covlens.Config, htmlPath string) (string, error) {
 	path := filepath.Join(r.OutputDir, "coverage_report.json")
-
-	files := make([]json.File, 0, len(r.Files))
-	for _, fc := range r.Files {
-		files = append(files, json.File{
-			Path:       fc.Path,
-			Package:    fc.Package,
-			Coverage:   fc.Coverage,
-			Statements: fc.Statements,
-			Covered:    fc.Covered,
-			Excluded:   fc.Excluded,
-			Status:     fc.Status,
-		})
-	}
-
-	mode := "diff"
-	if cfg.FullMode {
-		mode = "full"
-	}
-
-	out := json.Report{
-		Schema:                json.SchemaVersion,
-		Mode:                  mode,
-		BaseBranch:            cfg.BaseBranch,
-		DiffCoverage:          r.DiffCoverage,
-		TotalCoverage:         r.TotalCoverage,
-		BaselineTotalCoverage: r.BaselineTotalCoverage,
-		DiffThreshold:         cfg.DiffThreshold,
-		TotalThreshold:        cfg.TotalThreshold,
-		RatchetTotal:          cfg.RatchetTotal,
-		DiffPassed:            r.DiffPassed,
-		TotalPassed:           r.TotalPassed,
-		HTMLReportPath:        htmlPath,
-		Files:                 files,
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	if err := json.Encode(f, out); err != nil {
+	if err := json.Write(r, cfg, htmlPath, path); err != nil {
 		return "", err
 	}
 	return path, nil

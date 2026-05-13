@@ -6,6 +6,9 @@ package json
 import (
 	encjson "encoding/json"
 	"io"
+	"os"
+
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 // SchemaVersion identifies the wire format. Bump on breaking changes
@@ -54,4 +57,48 @@ func Encode(w io.Writer, r Report) error {
 	enc := encjson.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(r)
+}
+
+// Write maps r and cfg to the JSON wire format and writes it to path.
+func Write(r *covlens.Report, cfg covlens.Config, htmlPath, path string) error {
+	files := make([]File, 0, len(r.Files))
+	for _, fc := range r.Files {
+		files = append(files, File{
+			Path:       fc.Path,
+			Package:    fc.Package,
+			Coverage:   fc.Coverage,
+			Statements: fc.Statements,
+			Covered:    fc.Covered,
+			Excluded:   fc.Excluded,
+			Status:     fc.Status,
+		})
+	}
+
+	mode := "diff"
+	if cfg.FullMode {
+		mode = "full"
+	}
+
+	out := Report{
+		Schema:                SchemaVersion,
+		Mode:                  mode,
+		BaseBranch:            cfg.BaseBranch,
+		DiffCoverage:          r.DiffCoverage,
+		TotalCoverage:         r.TotalCoverage,
+		BaselineTotalCoverage: r.BaselineTotalCoverage,
+		DiffThreshold:         cfg.DiffThreshold,
+		TotalThreshold:        cfg.TotalThreshold,
+		RatchetTotal:          cfg.RatchetTotal,
+		DiffPassed:            r.DiffPassed,
+		TotalPassed:           r.TotalPassed,
+		HTMLReportPath:        htmlPath,
+		Files:                 files,
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return Encode(f, out)
 }
