@@ -17,8 +17,7 @@ import (
 // runFull runs a full-project coverage scan without requiring any git diff.
 // Every instrumented file is listed in the report with complete source view.
 // It does not use the diff-mode phase decomposition; the flow is short and
-// linear, and it shares only leaf helpers (classifyExclusion, fileStatusFor)
-// with the diff path.
+// linear, and it shares only leaf helpers (classifyExclusion) with the diff path.
 func (r *runner) runFull() (*Report, error) {
 	moduleRoots, err := findAllModuleRoots(r.cfg.WorkDir)
 	if err != nil {
@@ -63,7 +62,6 @@ func (r *runner) runFull() (*Report, error) {
 				Package:  pkg,
 				Coverage: -1,
 				Excluded: true,
-				Status:   "excluded",
 			})
 			continue
 		}
@@ -90,15 +88,12 @@ func (r *runner) runFull() (*Report, error) {
 		if stmts > 0 {
 			cov = float64(covered) / float64(stmts) * 100
 		}
-		status := fileStatusFor(cov, r.cfg.TotalThreshold)
-
 		fileCoverages = append(fileCoverages, FileCoverage{
 			Path:       relPath,
 			Package:    pkg,
 			Coverage:   cov,
 			Statements: stmts,
 			Covered:    covered,
-			Status:     status,
 		})
 
 		// nil Hunks signals "render the full file" to printers.

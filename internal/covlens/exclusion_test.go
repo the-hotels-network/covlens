@@ -7,24 +7,24 @@ import (
 	"testing"
 )
 
-func TestFileStatusFor(t *testing.T) {
+func TestFileCoverage_StatusFor(t *testing.T) {
 	cases := []struct {
 		name      string
-		cov       float64
+		fc        FileCoverage
 		threshold float64
 		want      string
 	}{
-		{"no data", -1, 80, "warn"},
-		{"above threshold", 90, 80, "ok"},
-		{"exactly at threshold", 80, 80, "ok"},
-		{"below threshold", 79.9, 80, "fail"},
-		{"zero coverage zero threshold", 0, 0, "ok"},
+		{"excluded", FileCoverage{Excluded: true, Coverage: -1}, 80, "excluded"},
+		{"no data", FileCoverage{Coverage: -1}, 80, "warn"},
+		{"above threshold", FileCoverage{Coverage: 90}, 80, "ok"},
+		{"exactly at threshold", FileCoverage{Coverage: 80}, 80, "ok"},
+		{"below threshold", FileCoverage{Coverage: 79.9}, 80, "fail"},
+		{"zero coverage zero threshold", FileCoverage{Coverage: 0}, 0, "ok"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := fileStatusFor(tc.cov, tc.threshold); got != tc.want {
-				t.Errorf("fileStatusFor(%v, %v) = %q, want %q",
-					tc.cov, tc.threshold, got, tc.want)
+			if got := tc.fc.StatusFor(tc.threshold); got != tc.want {
+				t.Errorf("StatusFor(%v) = %q, want %q", tc.threshold, got, tc.want)
 			}
 		})
 	}

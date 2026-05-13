@@ -64,13 +64,3 @@ func (r *runner) regexExcluder(modPathMap map[string]string, workDir string) fun
 		return false
 	}
 }
-
-func fileStatusFor(cov, threshold float64) string {
-	if cov < 0 {
-		return "warn"
-	}
-	if cov >= threshold {
-		return "ok"
-	}
-	return "fail"
-}

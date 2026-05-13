@@ -86,6 +86,11 @@ func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 		return fmt.Errorf("parsing template: %w", err)
 	}
 
+	threshold := cfg.DiffThreshold
+	if cfg.FullMode {
+		threshold = cfg.TotalThreshold
+	}
+
 	files := make([]fileSummary, 0, len(r.Files))
 	covByPath := make(map[string]covlens.FileCoverage, len(r.Files))
 	for _, fc := range r.Files {
@@ -96,7 +101,7 @@ func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 			Statements: fc.Statements,
 			Covered:    fc.Covered,
 			Excluded:   fc.Excluded,
-			Status:     fc.Status,
+			Status:     fc.StatusFor(threshold),
 		})
 		covByPath[fc.Path] = fc
 	}
@@ -114,7 +119,7 @@ func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 			Package:    src.Package,
 			SourceHTML: rendered,
 			Coverage:   fc.Coverage,
-			Status:     fc.Status,
+			Status:     fc.StatusFor(threshold),
 		})
 	}
 

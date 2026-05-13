@@ -167,8 +167,8 @@ func TestRun_FullMode_HonorsExclusions(t *testing.T) {
 		if !fc.Excluded {
 			t.Errorf("%s: Excluded = false, want true", name)
 		}
-		if fc.Status != "excluded" {
-			t.Errorf("%s: Status = %q, want %q", name, fc.Status, "excluded")
+		if !fc.Excluded {
+			t.Errorf("%s: Excluded = false, want true", name)
 		}
 	}
 

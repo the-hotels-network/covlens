@@ -39,7 +39,21 @@ type FileCoverage struct {
 	Statements int
 	Covered    int
 	Excluded   bool
-	Status     string // "ok", "fail", "warn", "excluded"
+}
+
+// StatusFor returns the verdict string for this file given threshold.
+// Callers should pass cfg.DiffThreshold in diff mode, cfg.TotalThreshold in full mode.
+func (f FileCoverage) StatusFor(threshold float64) string {
+	if f.Excluded {
+		return "excluded"
+	}
+	if f.Coverage < 0 {
+		return "warn"
+	}
+	if f.Coverage >= threshold {
+		return "ok"
+	}
+	return "fail"
 }
 
 // SourceData carries raw inputs a printer needs to render the source view

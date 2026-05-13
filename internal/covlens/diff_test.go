@@ -56,8 +56,8 @@ func TestBuildReport_ExcludedFile(t *testing.T) {
 		t.Fatalf("Files: got %d, want 1", len(rep.Files))
 	}
 	f := rep.Files[0]
-	if !f.Excluded || f.Status != "excluded" || f.Coverage != -1 {
-		t.Errorf("got %+v, want Excluded=true Status=excluded Coverage=-1", f)
+	if !f.Excluded || f.Coverage != -1 {
+		t.Errorf("got %+v, want Excluded=true Coverage=-1", f)
 	}
 	if len(rep.Sources) != 0 {
 		t.Errorf("Sources: got %d, want 0 (excluded files don't render)", len(rep.Sources))
@@ -94,8 +94,9 @@ func TestBuildReport_NoProfileDataGetsWarn(t *testing.T) {
 	rep := r.buildReport(coverageScope{}, subjects, coverageProfiles{}, coverageStats{
 		fileResults: map[string]coverage.FileResult{},
 	})
-	if len(rep.Files) != 1 || rep.Files[0].Status != "warn" || rep.Files[0].Coverage != -1 {
-		t.Errorf("got %+v, want one entry Status=warn Coverage=-1", rep.Files)
+	f0 := rep.Files[0]
+	if len(rep.Files) != 1 || f0.StatusFor(80) != "warn" || f0.Coverage != -1 {
+		t.Errorf("got %+v, want one entry status=warn Coverage=-1", rep.Files)
 	}
 }
 

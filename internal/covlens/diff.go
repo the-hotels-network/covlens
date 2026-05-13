@@ -256,16 +256,13 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 		}
 		if fs.excluded {
 			fc.Excluded = true
-			fc.Status = "excluded"
 			fc.Coverage = -1
 		} else if res, ok := stats.fileResults[fs.profileKey]; ok {
 			fc.Statements = res.Stmts
 			fc.Covered = res.Covered
 			fc.Coverage = float64(res.Covered) / float64(res.Stmts) * 100
-			fc.Status = fileStatusFor(fc.Coverage, r.cfg.DiffThreshold)
 		} else {
 			fc.Coverage = -1
-			fc.Status = "warn"
 		}
 		files = append(files, fc)
 	}

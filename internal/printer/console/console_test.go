@@ -47,7 +47,7 @@ func TestPrintSummary_DiffMode_AllPass(t *testing.T) {
 		DiffPassed:    true,
 		TotalPassed:   true,
 		Files: []covlens.FileCoverage{
-			{Path: "foo.go", Coverage: 92.5, Status: "ok"},
+			{Path: "foo.go", Coverage: 92.5},
 		},
 	}
 
@@ -190,10 +190,10 @@ func TestPrintSummary_FileStatuses(t *testing.T) {
 	report := &covlens.Report{
 		DiffPassed: true, TotalPassed: true,
 		Files: []covlens.FileCoverage{
-			{Path: "ok.go", Coverage: 95.0, Status: "ok"},
-			{Path: "fail.go", Coverage: 40.0, Status: "fail"},
-			{Path: "mocks.go", Coverage: -1, Excluded: true, Status: "excluded"},
-			{Path: "unknown.go", Coverage: -1, Status: "warn"},
+			{Path: "ok.go", Coverage: 95.0},
+			{Path: "fail.go", Coverage: 40.0},
+			{Path: "mocks.go", Coverage: -1, Excluded: true},
+			{Path: "unknown.go", Coverage: -1},
 		},
 	}
 
@@ -217,8 +217,8 @@ func TestPrintSummary_HidesExcludedWhenConfigured(t *testing.T) {
 	report := &covlens.Report{
 		DiffPassed: true, TotalPassed: true,
 		Files: []covlens.FileCoverage{
-			{Path: "kept.go", Coverage: 90, Status: "ok"},
-			{Path: "mocks.go", Coverage: -1, Excluded: true, Status: "excluded"},
+			{Path: "kept.go", Coverage: 90},
+			{Path: "mocks.go", Coverage: -1, Excluded: true},
 		},
 	}
 	var buf bytes.Buffer

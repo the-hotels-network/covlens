@@ -61,6 +61,11 @@ func Encode(w io.Writer, r Report) error {
 
 // Write maps r and cfg to the JSON wire format and writes it to path.
 func Write(r *covlens.Report, cfg covlens.Config, htmlPath, path string) error {
+	threshold := cfg.DiffThreshold
+	if cfg.FullMode {
+		threshold = cfg.TotalThreshold
+	}
+
 	files := make([]File, 0, len(r.Files))
 	for _, fc := range r.Files {
 		files = append(files, File{
@@ -70,7 +75,7 @@ func Write(r *covlens.Report, cfg covlens.Config, htmlPath, path string) error {
 			Statements: fc.Statements,
 			Covered:    fc.Covered,
 			Excluded:   fc.Excluded,
-			Status:     fc.Status,
+			Status:     fc.StatusFor(threshold),
 		})
 	}
 
