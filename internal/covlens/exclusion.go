@@ -1,13 +1,8 @@
 package covlens
 
 import (
-	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"regexp"
-
-	"golang.org/x/tools/cover"
 
 	"github.com/erioch/covlens/internal/directive"
 )
@@ -43,38 +38,6 @@ func classifyExclusion(relPath, absPath string, excludeRes []*regexp.Regexp) exc
 	return e
 }
 
-func fileStatusFor(cov, threshold float64) string {
-	if cov < 0 {
-		return "warn"
-	}
-	if cov >= threshold {
-		return "ok"
-	}
-	return "fail"
-}
-
-// aggregateFiltered sums covered/total statements across profiles, skipping
-// any profile for which excluded returns true. Returns the resulting coverage
-// percentage (or 0 if no statements remained after filtering).
-func aggregateFiltered(profiles []*cover.Profile, excluded func(profileFileName string) bool) float64 {
-	var stmts, covered int64
-	for _, p := range profiles {
-		if excluded(p.FileName) {
-			continue
-		}
-		for _, b := range p.Blocks {
-			stmts += int64(b.NumStmt)
-			if b.Count > 0 {
-				covered += int64(b.NumStmt)
-			}
-		}
-	}
-	if stmts == 0 {
-		return 0
-	}
-	return float64(covered) / float64(stmts) * 100
-}
-
 // regexExcluder returns a predicate suitable for aggregateFiltered that
 // reports whether a profile's file (resolved via modPathMap and made
 // relative to workDir) matches any of the runner's ExcludeFiles regexes.
@@ -102,31 +65,12 @@ func (r *runner) regexExcluder(modPathMap map[string]string, workDir string) fun
 	}
 }
 
-func logProgress(w io.Writer, msg string) {
-	fmt.Fprintf(w, "\033[0;34m▶\033[0m %s\n", msg)
-}
-
-// openTestOutputLog returns the writer that `go test` subprocesses should
-// write their stdout/stderr to, plus a cleanup func. Precedence:
-//
-//  1. VerboseTests=true → cfg.testOutput() (typically os.Stdout)
-//  2. Caller-set TestOutput (e.g., io.Discard in tests) → respect it
-//  3. Otherwise → create .coverage/test-output.log
-//
-// On any failure to create the log file, falls back to cfg.testOutput().
-// Callers must invoke the returned cleanup func when finished.
-func (r *runner) openTestOutputLog() (io.Writer, func()) {
-	if r.cfg.VerboseTests {
-		return r.cfg.testOutput(), func() {}
+func fileStatusFor(cov, threshold float64) string {
+	if cov < 0 {
+		return "warn"
 	}
-	if r.cfg.TestOutput != nil {
-		return r.cfg.TestOutput, func() {}
+	if cov >= threshold {
+		return "ok"
 	}
-	logPath := filepath.Join(r.outputDir, "test-output.log")
-	f, err := os.Create(logPath)
-	if err != nil {
-		return r.cfg.testOutput(), func() {}
-	}
-	logProgress(r.cfg.stderr(), fmt.Sprintf("Test output → %s", logPath))
-	return f, func() { _ = f.Close() }
+	return "fail"
 }
