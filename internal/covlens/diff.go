@@ -274,6 +274,17 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 		}
 	}
 
+	onlyDeletions := false
+	if len(subjects.files) > 0 {
+		onlyDeletions = true
+		for _, fs := range subjects.files {
+			if !fs.deleted {
+				onlyDeletions = false
+				break
+			}
+		}
+	}
+
 	totalPassed := stats.totalCov >= r.cfg.TotalThreshold
 	if r.cfg.RatchetTotal && stats.baselineCov > 0 {
 		// Pass if total coverage hasn't dropped by more than 0.1pp.
@@ -319,5 +330,6 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 		OutputDir:             r.outputDir,
 		SourceRoot:            scope.repoRoot,
 		Sources:               sources,
+		OnlyDeletions:         onlyDeletions,
 	}
 }

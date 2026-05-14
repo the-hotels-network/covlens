@@ -29,6 +29,12 @@ type Report struct {
 	// files with no profile data are NOT in this slice — only files with
 	// renderable content appear here.
 	Sources []SourceData
+	// OnlyDeletions is true when every changed Go file in this run was a
+	// pure deletion. Lets callers distinguish "no Go files in diff" (Files
+	// empty, OnlyDeletions false) from "Go files changed but all deleted"
+	// (Files empty, OnlyDeletions true) — both produce an empty Files
+	// slice but warrant different user-facing messages.
+	OnlyDeletions bool
 }
 
 // FileCoverage holds coverage data for a single source file.

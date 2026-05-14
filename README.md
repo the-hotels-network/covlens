@@ -54,7 +54,6 @@ covlens --config path/to/covlens.yaml
 | `--output-dir` | `.coverage` | Directory for profiles, HTML report, and JSON sidecar |
 | `--no-open` | false | Skip auto-opening the report in the browser |
 | `--open` | false | Force opening the report in the browser (overrides `html.auto_open: false` in config) |
-| `--no-html` | false | Skip HTML generation entirely (implies `--no-open`); JSON sidecar is still written |
 | `--ratchet` (`-r`) | false | Replace `--total-threshold` with a "must not drop vs. base branch" check |
 | `--full` (`-f`) | false | Skip the diff and report coverage for every file in the project |
 | `--verbose` (`-v`) | false | Stream `go test` output to stdout (default: capture to `.coverage/test_output.log`) |
@@ -92,8 +91,8 @@ func main() {
 
 Every run writes its artifacts under `output_dir` (default: `.coverage/`):
 
-- `coverage_report.html` — self-contained HTML report (skip with `--no-html`)
-- `coverage_report.json` — machine-readable sidecar, always written when covlens succeeds
+- `coverage_report.html` — self-contained HTML report
+- `coverage_report.json` — machine-readable sidecar
 - `test_output.log` — raw `go test` output; written when `--verbose` is not set (use `--verbose` to stream it to stdout instead)
 - `coverage.out`, `coverage_diff.out` — raw Go coverage profiles (kept for re-use; safe to delete)
 

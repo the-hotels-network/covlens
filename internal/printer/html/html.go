@@ -46,6 +46,7 @@ type reportInput struct {
 	RatchetTotal          bool
 	Theme                 string
 	FullMode              bool
+	OnlyDeletions         bool
 	Files                 []fileSummary
 }
 
@@ -136,6 +137,7 @@ func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 		RatchetTotal:          cfg.RatchetTotal,
 		Theme:                 cfg.HTML.Theme,
 		FullMode:              cfg.FullMode,
+		OnlyDeletions:         r.OnlyDeletions,
 		Files:                 files,
 	}
 

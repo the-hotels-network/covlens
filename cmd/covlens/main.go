@@ -22,7 +22,6 @@ func main() {
 	outputDir := flag.String("output-dir", "", "Directory for generated artifacts")
 	open := flag.Bool("open", false, "Force opening the report in the browser (overrides auto_open: false in config)")
 	noOpen := flag.Bool("no-open", false, "Don't open report in browser (overrides auto_open: true in config)")
-	noHTML := flag.Bool("no-html", false, "Skip HTML report generation entirely (implies --no-open)")
 	ratchet := flag.Bool("ratchet", false, "Fail only if total coverage drops vs base branch")
 	flag.BoolVar(ratchet, "r", false, "shorthand for --ratchet")
 	full := flag.Bool("full", false, "Full project scan: show coverage for all files, no diff required")
@@ -70,15 +69,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// HTML first — its path is referenced from the JSON sidecar.
-	htmlPath := ""
-	if !*noHTML && len(report.Files) > 0 {
-		p, err := writeHTMLReport(report, cfg)
-		if err != nil {
-			console.Error(os.Stderr, "failed to generate HTML report: %v", err)
-		} else {
-			htmlPath = p
-		}
+	// HTML first — its path is referenced from the JSON sidecar. Always
+	// written so downstream CI tooling can rely on the file existing.
+	htmlPath, err := writeHTMLReport(report, cfg)
+	if err != nil {
+		console.Error(os.Stderr, "failed to generate HTML report: %v", err)
+		htmlPath = ""
 	}
 
 	// JSON sidecar for CI consumers — always written so a parser can rely
@@ -90,7 +86,17 @@ func main() {
 	}
 
 	if len(report.Files) == 0 {
-		console.Info(os.Stdout, "No changed Go files detected relative to '"+cfg.BaseBranch+"'.")
+		msg := "No changed Go files detected relative to '" + cfg.BaseBranch + "'."
+		if report.OnlyDeletions {
+			msg = "All changed Go files were deleted; nothing to measure."
+		}
+		console.Info(os.Stdout, msg)
+		if htmlPath != "" {
+			console.Info(os.Stdout, "HTML report: "+htmlPath)
+		}
+		if jsonPath != "" {
+			console.Info(os.Stdout, "JSON report: "+jsonPath)
+		}
 		return
 	}
 

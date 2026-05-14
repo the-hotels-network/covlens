@@ -34,6 +34,11 @@
     Files: <strong>{{.FileCount}}</strong>
   </p>
 
+  {{if eq (len .Files) 0}}
+  <div class="status-bar status-pass">
+    &#10004; {{if .OnlyDeletions}}All changed Go files were deleted; nothing to measure.{{else}}No Go files changed relative to <code>{{.BaseBranch}}</code>; nothing to measure.{{end}}
+  </div>
+  {{else}}
   <!-- Status bar -->
   {{if and .DiffPassed .TotalPassed}}
   <div class="status-bar status-pass">&#10004; All coverage thresholds passed</div>
@@ -69,6 +74,7 @@
       </div>
     </div>
   </div>
+  {{end}}
 
   <!-- File table -->
   <section>

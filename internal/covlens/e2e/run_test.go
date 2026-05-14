@@ -286,6 +286,66 @@ func TestRun_DiffMode_DeletedFileExcluded(t *testing.T) {
 	}
 }
 
+// TestRun_DiffMode_OnlyDeletions guards the empty-state behavior when the
+// PR's diff consists entirely of deletions: covlens must still succeed
+// (vacuous diff pass), the report must surface OnlyDeletions=true so callers
+// can render a meaningful message, and Files must be empty.
+func TestRun_DiffMode_OnlyDeletions(t *testing.T) {
+	requireExecutables(t, "git", "go")
+
+	dir := t.TempDir()
+	env := isolatedGitEnv()
+	runGit := gitRunner(t, dir, env)
+	write := fileWriter(t, dir)
+
+	// base: two packages so feature can delete one and leave the module valid.
+	runGit("init", "-b", "main")
+	write("go.mod", "module example.com/onlydel\n\ngo 1.21\n")
+	write("pkg_keep/keep.go", "package keep\n\nfunc Keep() int { return 1 }\n")
+	write("pkg_keep/keep_test.go", "package keep\n\nimport \"testing\"\n\nfunc TestKeep(t *testing.T) {\n\tif Keep() != 1 { t.Fail() }\n}\n")
+	write("pkg_drop/drop.go", "package drop\n\nfunc Drop() int { return 2 }\n")
+	write("pkg_drop/drop_test.go", "package drop\n\nimport \"testing\"\n\nfunc TestDrop(t *testing.T) {\n\tif Drop() != 2 { t.Fail() }\n}\n")
+	runGit("add", ".")
+	runGit("commit", "-m", "base")
+
+	// feature: delete the whole pkg_drop package. No additions, no edits.
+	runGit("checkout", "-b", "feature")
+	if err := os.RemoveAll(filepath.Join(dir, "pkg_drop")); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "-A")
+	runGit("commit", "-m", "drop pkg_drop")
+
+	cfg := covlens.DefaultConfig()
+	cfg.WorkDir = dir
+	cfg.HTML.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
+	cfg.DiffThreshold = 80 // would fail if 0.0% were evaluated
+	cfg.TotalThreshold = 0
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	report, err := covlens.Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if !report.DiffPassed {
+		t.Errorf("DiffPassed = false — should be vacuously true for deletion-only diff (DiffCoverage=%.1f%%)", report.DiffCoverage)
+	}
+	if !report.TotalPassed {
+		t.Errorf("TotalPassed = false (TotalCoverage=%.1f%%)", report.TotalCoverage)
+	}
+	if len(report.Files) != 0 {
+		t.Errorf("expected 0 files for deletion-only diff, got %d: %+v", len(report.Files), report.Files)
+	}
+	if !report.OnlyDeletions {
+		t.Errorf("OnlyDeletions = false; want true for a diff consisting entirely of deletions")
+	}
+}
+
 // TestRun_DiffMode_AllChangedFilesExcluded guards the fix for the edge case
 // where every changed file is matched by ExcludeFiles. Before the fix,
 // diffCov defaulted to 0.0 and DiffPassed = (0.0 >= threshold) = false,
