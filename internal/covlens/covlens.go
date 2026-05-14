@@ -18,6 +18,9 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 		return nil, err
 	}
 	if r.cfg.FullMode {
+		if r.cfg.RatchetTotal {
+			logProgress(r.cfg.stderr(), "warning: --ratchet has no effect in --full mode; using --total-threshold instead")
+		}
 		return r.runFull()
 	}
 	return r.run()

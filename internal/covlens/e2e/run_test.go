@@ -286,6 +286,73 @@ func TestRun_DiffMode_DeletedFileExcluded(t *testing.T) {
 	}
 }
 
+// TestRun_DiffMode_AllChangedFilesExcluded guards the fix for the edge case
+// where every changed file is matched by ExcludeFiles. Before the fix,
+// diffCov defaulted to 0.0 and DiffPassed = (0.0 >= threshold) = false,
+// causing a spurious failure even though there was nothing measurable to check.
+// After the fix, measurable == 0 → DiffPassed is vacuously true.
+func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
+	requireExecutables(t, "git", "go")
+
+	dir := t.TempDir()
+	env := isolatedGitEnv()
+	runGit := gitRunner(t, dir, env)
+	write := fileWriter(t, dir)
+
+	// base: foo.go (fully tested) — gives total coverage something to measure.
+	runGit("init", "-b", "main")
+	write("go.mod", "module example.com/excl\n\ngo 1.21\n")
+	write("foo.go", "package foo\n\nfunc Foo() int { return 1 }\n")
+	write("foo_test.go", "package foo\n\nimport \"testing\"\n\nfunc TestFoo(t *testing.T) {\n\tif Foo() != 1 { t.Fail() }\n}\n")
+	runGit("add", ".")
+	runGit("commit", "-m", "base")
+
+	// feature: only change a generated file that will be excluded.
+	runGit("checkout", "-b", "feature")
+	write("foo_gen.go", "package foo\n\n// generated — do not edit\nfunc Gen() int { return 99 }\n")
+	runGit("add", ".")
+	runGit("commit", "-m", "add generated file")
+
+	cfg := covlens.DefaultConfig()
+	cfg.WorkDir = dir
+	cfg.HTML.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
+	cfg.ExcludeFiles = []string{`_gen\.go$`}
+	cfg.DiffThreshold = 80 // would fail if 0.0% were evaluated
+	cfg.TotalThreshold = 0  // diff mode only tests changed packages; none are testable here
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	report, err := covlens.Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if !report.DiffPassed {
+		t.Errorf("DiffPassed = false — should be vacuously true when all changed files are excluded (DiffCoverage=%.1f%%)", report.DiffCoverage)
+	}
+	if !report.TotalPassed {
+		t.Errorf("TotalPassed = false (TotalCoverage=%.1f%%)", report.TotalCoverage)
+	}
+
+	// The excluded file must appear in the report as excluded, not measurable.
+	var gen *covlens.FileCoverage
+	for i := range report.Files {
+		if strings.HasSuffix(report.Files[i].Path, "foo_gen.go") {
+			gen = &report.Files[i]
+			break
+		}
+	}
+	if gen == nil {
+		t.Fatalf("foo_gen.go missing from report.Files; got %+v", report.Files)
+	}
+	if !gen.Excluded {
+		t.Errorf("foo_gen.go: Excluded = false, want true")
+	}
+}
+
 // TestRun_RatchetTotal_FailsOnRegression covers the --ratchet path
 // (baselineTotalCoverage): when total coverage drops vs the merge-base,
 // the gate must fail even if the current value clears the absolute

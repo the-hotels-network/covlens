@@ -267,6 +267,13 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 		files = append(files, fc)
 	}
 
+	measurable := 0
+	for _, fs := range subjects.files {
+		if !fs.excluded && !fs.deleted {
+			measurable++
+		}
+	}
+
 	totalPassed := stats.totalCov >= r.cfg.TotalThreshold
 	if r.cfg.RatchetTotal && stats.baselineCov > 0 {
 		// Pass if total coverage hasn't dropped by more than 0.1pp.
@@ -306,7 +313,7 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 		DiffCoverage:          stats.diffCov,
 		TotalCoverage:         stats.totalCov,
 		BaselineTotalCoverage: stats.baselineCov,
-		DiffPassed:            stats.diffCov >= r.cfg.DiffThreshold,
+		DiffPassed:            measurable == 0 || stats.diffCov >= r.cfg.DiffThreshold,
 		TotalPassed:           totalPassed,
 		Files:                 files,
 		OutputDir:             r.outputDir,
