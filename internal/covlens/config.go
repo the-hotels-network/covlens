@@ -29,7 +29,7 @@ type Config struct {
 
 	// VerboseTests streams the raw `go test` stdout/stderr to TestOutput
 	// (defaults to os.Stdout). When false (default), test output is captured
-	// to .coverage/test-output.log and only the covlens progress summary
+	// to .coverage/test_output.log and only the covlens progress summary
 	// appears on the terminal. Useful for large projects where the streamed
 	// per-package "ok pkg ..." lines drown out everything else.
 	VerboseTests bool `yaml:"verbose_tests"`

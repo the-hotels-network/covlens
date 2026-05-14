@@ -28,7 +28,7 @@ func main() {
 	full := flag.Bool("full", false, "Full project scan: show coverage for all files, no diff required")
 	flag.BoolVar(full, "f", false, "shorthand for --full")
 	configPath := flag.String("config", "covlens.yaml", "Path to config file")
-	verbose := flag.Bool("verbose", false, "Stream `go test` output to stdout (default: capture to .coverage/test-output.log)")
+	verbose := flag.Bool("verbose", false, "Stream `go test` output to stdout (default: capture to .coverage/test_output.log)")
 	flag.BoolVar(verbose, "v", false, "shorthand for --verbose")
 	flag.Parse()
 

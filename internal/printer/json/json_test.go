@@ -3,8 +3,12 @@ package json
 import (
 	"bytes"
 	encjson "encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/erioch/covlens/internal/covlens"
 )
 
 func TestEncode_RoundTrip(t *testing.T) {
@@ -95,5 +99,72 @@ func TestEncode_OmitsEmptyOptionalFields(t *testing.T) {
 		if strings.Contains(out, banned) {
 			t.Errorf("output unexpectedly contains optional field %s\n%s", banned, out)
 		}
+	}
+}
+
+func TestWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.json")
+
+	report := &covlens.Report{
+		TotalCoverage: 85.0,
+		DiffCoverage:  90.0,
+		DiffPassed:    true,
+		TotalPassed:   true,
+		Files: []covlens.FileCoverage{
+			{Path: "foo.go", Package: "pkg", Coverage: 90.0, Statements: 10, Covered: 9},
+			{Path: "bar.go", Excluded: true, Coverage: -1},
+		},
+	}
+	cfg := covlens.Config{BaseBranch: "main", DiffThreshold: 80, TotalThreshold: 70}
+
+	if err := Write(report, cfg, "/tmp/report.html", path); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+
+	var got Report
+	if err := encjson.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v\noutput:\n%s", err, data)
+	}
+
+	if got.Mode != "diff" {
+		t.Errorf("Mode = %q, want diff", got.Mode)
+	}
+	if got.TotalCoverage != 85.0 {
+		t.Errorf("TotalCoverage = %v, want 85.0", got.TotalCoverage)
+	}
+	if got.HTMLReportPath != "/tmp/report.html" {
+		t.Errorf("HTMLReportPath = %q, want /tmp/report.html", got.HTMLReportPath)
+	}
+	if len(got.Files) != 2 {
+		t.Fatalf("Files: got %d, want 2", len(got.Files))
+	}
+	if got.Files[1].Status != "excluded" {
+		t.Errorf("Files[1].Status = %q, want excluded", got.Files[1].Status)
+	}
+}
+
+func TestWrite_FullMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.json")
+
+	report := &covlens.Report{TotalCoverage: 75.0, TotalPassed: true, DiffPassed: true}
+	cfg := covlens.Config{TotalThreshold: 70, DiffThreshold: 80, FullMode: true}
+
+	if err := Write(report, cfg, "", path); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	data, _ := os.ReadFile(path)
+	var got Report
+	encjson.Unmarshal(data, &got)
+
+	if got.Mode != "full" {
+		t.Errorf("Mode = %q, want full", got.Mode)
 	}
 }
