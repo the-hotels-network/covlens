@@ -53,33 +53,16 @@ covlens --config path/to/covlens.yaml
 | `--total-threshold` | `70` | Minimum coverage % for the whole project |
 | `--output-dir` | `.coverage` | Directory for profiles, HTML report, and JSON sidecar |
 | `--no-open` | false | Skip auto-opening the report in the browser |
-| `--open` | false | Force opening the report in the browser (overrides `auto_open: false` in config) |
+| `--open` | false | Force opening the report in the browser (overrides `html.auto_open: false` in config) |
 | `--no-html` | false | Skip HTML generation entirely (implies `--no-open`); JSON sidecar is still written |
-| `--ratchet` | false | Replace `--total-threshold` with a "must not drop vs. base branch" check |
+| `--ratchet` (`-r`) | false | Replace `--total-threshold` with a "must not drop vs. base branch" check |
 | `--full` (`-f`) | false | Skip the diff and report coverage for every file in the project |
-| `--verbose` (`-v`) | false | Stream `go test` output to stdout (default: capture to `.coverage/test-output.log`) |
+| `--verbose` (`-v`) | false | Stream `go test` output to stdout (default: capture to `.coverage/test_output.log`) |
 | `--config` | `covlens.yaml` | Path to config file |
 
 ## Configuration
 
 Place a `covlens.yaml` at your project root. CLI flags override it.
-
-```yaml
-base_branch: main
-diff_threshold: 80
-total_threshold: 70
-output_dir: .coverage
-auto_open: true
-show_excluded: true
-theme: auto         # "auto", "light", or "dark"
-
-# Exclude files matching any of these regexps
-exclude_files:
-  - "main\\.go$"     # `package main` entry points (typically untestable CLI plumbing)
-  - "_mock\\.go$"    # generated mocks
-  - "^vendor/"       # vendored dependencies
-  - "generated"      # any file with "generated" in its path
-```
 
 See [`example/covlens.yaml`](example/covlens.yaml) for a fully annotated reference.
 
@@ -111,6 +94,7 @@ Every run writes its artifacts under `output_dir` (default: `.coverage/`):
 
 - `coverage_report.html` — self-contained HTML report (skip with `--no-html`)
 - `coverage_report.json` — machine-readable sidecar, always written when covlens succeeds
+- `test_output.log` — raw `go test` output; written when `--verbose` is not set (use `--verbose` to stream it to stdout instead)
 - `coverage.out`, `coverage_diff.out` — raw Go coverage profiles (kept for re-use; safe to delete)
 
 The JSON sidecar is the integration point for CI tooling. Key fields:
@@ -148,9 +132,9 @@ jobs:
           name: Coverage check
           command: |
             go install github.com/erioch/covlens/cmd/covlens@latest
-            covlens --no-open
+            covlens --no-open        # add --verbose to stream test output to the job log
       - store_artifacts:
-          path: .coverage/
+          path: .coverage/           # captures HTML report, JSON sidecar, and test_output.log
           destination: coverage
 workflows:
   test:
@@ -210,4 +194,8 @@ This means: if you added 20 lines and all 20 are covered, diff coverage is 100% 
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © [The Hotels Network](https://thehotelsnetwork.com)
+
+---
+
+Built with [Claude Code](https://claude.ai/code)
