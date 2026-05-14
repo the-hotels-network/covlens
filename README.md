@@ -14,7 +14,7 @@ Go coverage tool that runs tests only on packages you changed and validates thre
 ## Install
 
 ```sh
-go install github.com/erioch/covlens/cmd/covlens@latest
+go install github.com/the-hotels-network/covlens/cmd/covlens@latest
 ```
 
 Requires Go 1.25+, `git`, and `go` on your PATH. (Go's auto-toolchain feature means
@@ -131,7 +131,7 @@ jobs:
       - run:
           name: Coverage check
           command: |
-            go install github.com/erioch/covlens/cmd/covlens@latest
+            go install github.com/the-hotels-network/covlens/cmd/covlens@latest
             covlens --no-open        # add --verbose to stream test output to the job log
       - store_artifacts:
           path: .coverage/           # captures HTML report, JSON sidecar, and test_output.log

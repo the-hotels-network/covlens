@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/tools/cover"
 
-	"github.com/erioch/covlens/internal/covlens"
+	"github.com/the-hotels-network/covlens/internal/covlens"
 )
 
 // realSourceRoot writes the given filename + content to a temp dir and

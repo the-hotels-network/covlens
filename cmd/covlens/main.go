@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/erioch/covlens/internal/covlens"
-	"github.com/erioch/covlens/internal/printer/console"
-	"github.com/erioch/covlens/internal/printer/html"
-	"github.com/erioch/covlens/internal/printer/json"
+	"github.com/the-hotels-network/covlens/internal/covlens"
+	"github.com/the-hotels-network/covlens/internal/printer/console"
+	"github.com/the-hotels-network/covlens/internal/printer/html"
+	"github.com/the-hotels-network/covlens/internal/printer/json"
 )
 
 func main() {

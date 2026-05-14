@@ -7,9 +7,9 @@ import (
 
 	"golang.org/x/tools/cover"
 
-	"github.com/erioch/covlens/internal/coverage"
-	"github.com/erioch/covlens/internal/directive"
-	"github.com/erioch/covlens/internal/packages"
+	"github.com/the-hotels-network/covlens/internal/coverage"
+	"github.com/the-hotels-network/covlens/internal/directive"
+	"github.com/the-hotels-network/covlens/internal/packages"
 )
 
 // coverageScope is the input to a diff-mode run: the git context and the list

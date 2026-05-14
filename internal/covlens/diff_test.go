@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/tools/cover"
 
-	"github.com/erioch/covlens/internal/coverage"
+	"github.com/the-hotels-network/covlens/internal/coverage"
 )
 
 func TestResolvePackages(t *testing.T) {

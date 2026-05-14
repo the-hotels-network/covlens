@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/erioch/covlens/internal/covlens"
+	"github.com/the-hotels-network/covlens/internal/covlens"
 )
 
 func TestEncode_RoundTrip(t *testing.T) {

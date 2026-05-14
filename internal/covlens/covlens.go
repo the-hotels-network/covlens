@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/erioch/covlens/internal/git"
+	"github.com/the-hotels-network/covlens/internal/git"
 )
 
 // Run executes a coverage analysis and returns the resulting report.

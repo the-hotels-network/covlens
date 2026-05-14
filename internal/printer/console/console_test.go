@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/erioch/covlens/internal/covlens"
-	"github.com/erioch/covlens/internal/printer/console"
+	"github.com/the-hotels-network/covlens/internal/covlens"
+	"github.com/the-hotels-network/covlens/internal/printer/console"
 )
 
 // ansiRE matches ANSI SGR escape sequences. Tests strip them so assertions

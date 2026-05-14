@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/erioch/covlens/internal/covlens"
+	"github.com/the-hotels-network/covlens/internal/covlens"
 )
 
 // SchemaVersion identifies the wire format. Bump on breaking changes

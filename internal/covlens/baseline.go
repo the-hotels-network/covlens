@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/tools/cover"
 
-	"github.com/erioch/covlens/internal/coverage"
+	"github.com/the-hotels-network/covlens/internal/coverage"
 )
 
 // baselineTotalCoverage checks out scope.mergeBase into a temporary worktree,

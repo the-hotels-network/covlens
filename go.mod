@@ -1,4 +1,4 @@
-module github.com/erioch/covlens
+module github.com/the-hotels-network/covlens
 
 go 1.25.0
 

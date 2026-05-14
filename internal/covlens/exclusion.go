@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/erioch/covlens/internal/directive"
+	"github.com/the-hotels-network/covlens/internal/directive"
 )
 
 // exclusion captures the per-file decision shared by diff and full modes.
