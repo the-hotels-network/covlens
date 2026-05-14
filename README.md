@@ -182,6 +182,18 @@ Every test in the `e2e` package now skips under `-short` automatically — new e
 
 If your e2e-heavy files have no meaningful unit-test seam without a deeper refactor, list them in `exclude_files` so they don't drag the total coverage number down — see [Ignoring files and functions](#ignoring-files-and-functions).
 
+### Race detection
+
+covlens does not pass `-race` to `go test`. The race detector requires `CGO_ENABLED=1` and a C toolchain, which is absent from minimal CI images (`golang:alpine`, distroless, scratch-based), and it multiplies test wall time by 2–5×. Keeping it opt-in preserves portability and keeps covlens focused on coverage.
+
+To enable race detection for a covlens run, set `GOFLAGS` in your environment:
+
+```sh
+GOFLAGS="-race" covlens
+```
+
+The subprocess inherits the environment, so the flag is appended to every `go test` invocation covlens makes. `-covermode=atomic` (which `-race` requires) is already set.
+
 ## How diff coverage is calculated
 
 For each changed file, covlens:

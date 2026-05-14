@@ -84,7 +84,7 @@ func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, outpu
 
 	for i, root := range moduleRoots {
 		prof := filepath.Join(outputDir, fmt.Sprintf("total_%d.out", i))
-		args := []string{"test", "-short", "-coverprofile=" + prof, "-covermode=atomic", "./..."}
+		args := []string{"test", "-short", "-count=1", "-coverprofile=" + prof, "-covermode=atomic", "./..."}
 		written, tool, runErr := runModule(ctx, root, args, prof, output)
 		if tool != "" {
 			return res, missingToolHint(tool, root)
@@ -130,7 +130,7 @@ func RunDiff(ctx context.Context, grouped map[string][]string, outputDir string,
 		prof := filepath.Join(outputDir, fmt.Sprintf("diff_%d.out", i))
 		i++
 		covPkg := strings.Join(pkgs, ",")
-		args := []string{"test", "-short", "-coverprofile=" + prof, "-covermode=atomic", "-coverpkg=" + covPkg}
+		args := []string{"test", "-short", "-count=1", "-coverprofile=" + prof, "-covermode=atomic", "-coverpkg=" + covPkg}
 		args = append(args, pkgs...)
 		written, tool, runErr := runModule(ctx, root, args, prof, output)
 		if tool != "" {
