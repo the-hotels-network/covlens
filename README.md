@@ -149,6 +149,10 @@ The process exits 1 when a threshold is not met, which fails the job. `store_art
 makes the HTML report and JSON sidecar available in the CircleCI UI under the build's
 Artifacts tab.
 
+### PR comments and other CI glue
+
+The JSON sidecar is the integration point for CI tooling — see [Output](#output). Reference scripts that wire covlens into specific CI/chat platforms live under [`scripts/ci/`](scripts/ci/). For CircleCI + GitHub, [`scripts/ci/circleci/pr-comment.sh`](scripts/ci/circleci/pr-comment.sh) posts a sticky PR comment with the pass/fail summary and a link to the HTML report — see its [README](scripts/ci/circleci/README.md). These scripts are samples, not part of the binary's stability contract; see [ADR 0003](docs/adr/0003-transport-neutral-outputs.md).
+
 ## Multi-module repos
 
 covlens walks up the directory tree from each changed file to find the nearest `go.mod`, so monorepos with multiple modules work without any configuration.
