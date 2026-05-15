@@ -164,8 +164,10 @@ func TestPrintSummary_Ratchet_WithBaseline_Dropped(t *testing.T) {
 }
 
 // TestPrintSummary_Ratchet_BaselineZero exercises the fallback path when
-// --ratchet was set but the baseline could not be computed (BaselineTotalCoverage = 0).
-// In that case PrintSummary falls through to the threshold display.
+// --ratchet was set and the merge-base produced no measurable coverage
+// (BaselineTotalCoverage = 0 — e.g. empty repo, all-excluded baseline, or
+// genuinely 0% covered). Compute errors abort the run; this is not that path.
+// PrintSummary falls through to the threshold display.
 func TestPrintSummary_Ratchet_BaselineZero(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, RatchetTotal: true}
 	report := &covlens.Report{

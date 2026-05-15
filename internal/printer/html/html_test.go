@@ -136,9 +136,11 @@ func TestGenerate_RatchetWithBaseline_Negative(t *testing.T) {
 }
 
 func TestGenerate_NoRatchetBaseline_NeutralDelta(t *testing.T) {
-	// RatchetTotal is true but BaselineTotalCoverage is 0 (couldn't be
-	// computed). Generate falls through to non-ratchet behavior; HasDelta
-	// is false and the delta class stays neutral.
+	// RatchetTotal is true but BaselineTotalCoverage is 0 — merge-base has
+	// no measurable coverage (empty repo, all-excluded baseline, or genuinely
+	// 0% covered). Compute errors abort the run; this is not that path.
+	// Generate falls through to non-ratchet behavior; HasDelta is false and
+	// the delta class stays neutral.
 	r := &covlens.Report{
 		Diff: &covlens.DiffSection{
 			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
