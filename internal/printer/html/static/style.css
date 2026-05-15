@@ -142,15 +142,17 @@ h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
     flex: 1; min-width: 200px;
 }
 
-.badge-ok   { background: var(--green-bg); border: 1px solid var(--green); }
-.badge-fail { background: var(--red-bg);   border: 1px solid var(--red); }
+.badge-ok      { background: var(--green-bg); border: 1px solid var(--green); }
+.badge-fail    { background: var(--red-bg);   border: 1px solid var(--red); }
+.badge-neutral { background: var(--bg2);      border: 1px solid var(--border); }
 .badge-delta-positive { background: var(--green-bg); border: 1px solid var(--green); }
 .badge-delta-negative { background: var(--red-bg);   border: 1px solid var(--red); }
-.badge-delta-neutral  { background: var(--bg2);       border: 1px solid var(--border); }
+.badge-delta-neutral  { background: var(--bg2);      border: 1px solid var(--border); }
 
 .badge h2 { font-size: 36px; font-weight: 700; margin-bottom: 2px; }
-.badge-ok   h2 { color: var(--green); }
-.badge-fail h2 { color: var(--red); }
+.badge-ok      h2 { color: var(--green); }
+.badge-fail    h2 { color: var(--red); }
+.badge-neutral h2 { color: var(--muted); }
 .badge-delta-positive h2 { color: var(--green); }
 .badge-delta-negative h2 { color: var(--red); }
 .badge-delta-neutral  h2 { color: var(--muted); }
@@ -158,8 +160,9 @@ h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
 .badge p  { font-size: 13px; color: var(--muted); }
 
 .badge .threshold { font-size: 12px; margin-top: 4px; }
-.badge-ok   .threshold { color: var(--green); }
-.badge-fail .threshold { color: var(--red); }
+.badge-ok      .threshold { color: var(--green); }
+.badge-fail    .threshold { color: var(--red); }
+.badge-neutral .threshold { color: var(--muted); }
 .badge-delta-positive .threshold { color: var(--green); }
 .badge-delta-negative .threshold { color: var(--red); }
 .badge-delta-neutral  .threshold { color: var(--muted); }

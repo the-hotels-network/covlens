@@ -21,13 +21,21 @@ const (
 func PrintSummary(out io.Writer, r *covlens.Report, cfg covlens.Config) {
 	fmt.Fprintf(out, "\n%sSummary%s\n\n", cBold, cReset)
 
-	// Diff coverage (skipped in full mode).
-	if !cfg.FullMode {
-		fmt.Fprintf(out, "  %-30s %.2f%% (threshold: %.0f%%)\n", "Diff coverage:", r.DiffCoverage, cfg.DiffThreshold)
-		if r.DiffPassed {
-			fmt.Fprintf(out, "  %s✔%s  Diff threshold passed\n", cGreen, cReset)
-		} else {
-			fmt.Fprintf(out, "  %s✘%s  Diff threshold not met\n", cRed, cReset)
+	// Diff coverage (skipped in full mode). For non-measured statuses
+	// (only AllExcluded reaches here; NoGoChanges/OnlyDeletions are
+	// short-circuited in main before PrintSummary runs) replace the
+	// numeric line with a chip explaining the vacuous pass.
+	if r.Diff != nil {
+		switch r.Diff.Status {
+		case covlens.DiffStatusMeasured:
+			fmt.Fprintf(out, "  %-30s %.2f%% (threshold: %.0f%%)\n", "Diff coverage:", r.Diff.Coverage, r.Diff.Threshold)
+			if r.Diff.Passed {
+				fmt.Fprintf(out, "  %s✔%s  Diff threshold passed\n", cGreen, cReset)
+			} else {
+				fmt.Fprintf(out, "  %s✘%s  Diff threshold not met\n", cRed, cReset)
+			}
+		case covlens.DiffStatusAllExcluded:
+			fmt.Fprintf(out, "  %s–%s  Diff coverage:                 %sall changed Go files excluded by exclude_files%s\n", cYellow, cReset, cYellow, cReset)
 		}
 	}
 

@@ -22,20 +22,25 @@ type Report struct {
 
 	BaseBranch string `json:"baseBranch,omitempty"`
 
-	DiffCoverage          float64 `json:"diffCoverage"`
+	Diff *DiffSection `json:"diff,omitempty"` // omitted in --full mode
+
 	TotalCoverage         float64 `json:"totalCoverage"`
 	BaselineTotalCoverage float64 `json:"baselineTotalCoverage,omitempty"`
-
-	DiffThreshold  float64 `json:"diffThreshold"`
-	TotalThreshold float64 `json:"totalThreshold"`
-	RatchetTotal   bool    `json:"ratchetTotal,omitempty"`
-
-	DiffPassed  bool `json:"diffPassed"`
-	TotalPassed bool `json:"totalPassed"`
+	TotalThreshold        float64 `json:"totalThreshold"`
+	TotalPassed           bool    `json:"totalPassed"`
+	RatchetTotal          bool    `json:"ratchetTotal,omitempty"`
 
 	HTMLReportPath string `json:"htmlReportPath,omitempty"`
 
 	Files []File `json:"files"`
+}
+
+// DiffSection is the JSON-serialized form of the diff portion of a run.
+type DiffSection struct {
+	Status    string  `json:"status"` // "measured" | "no-go-changes" | "only-deletions" | "all-excluded"
+	Coverage  float64 `json:"coverage"`
+	Threshold float64 `json:"threshold"`
+	Passed    bool    `json:"passed"`
 }
 
 // File is a per-file entry in Report.Files.
@@ -88,16 +93,21 @@ func Write(r *covlens.Report, cfg covlens.Config, htmlPath, path string) error {
 		Schema:                SchemaVersion,
 		Mode:                  mode,
 		BaseBranch:            cfg.BaseBranch,
-		DiffCoverage:          r.DiffCoverage,
 		TotalCoverage:         r.TotalCoverage,
 		BaselineTotalCoverage: r.BaselineTotalCoverage,
-		DiffThreshold:         cfg.DiffThreshold,
 		TotalThreshold:        cfg.TotalThreshold,
-		RatchetTotal:          cfg.RatchetTotal,
-		DiffPassed:            r.DiffPassed,
 		TotalPassed:           r.TotalPassed,
+		RatchetTotal:          cfg.RatchetTotal,
 		HTMLReportPath:        htmlPath,
 		Files:                 files,
+	}
+	if r.Diff != nil {
+		out.Diff = &DiffSection{
+			Status:    string(r.Diff.Status),
+			Coverage:  r.Diff.Coverage,
+			Threshold: r.Diff.Threshold,
+			Passed:    r.Diff.Passed,
+		}
 	}
 
 	f, err := os.Create(path)

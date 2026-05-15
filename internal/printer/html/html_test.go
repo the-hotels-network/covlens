@@ -42,9 +42,13 @@ func TestGenerate_HappyPath_DiffMode(t *testing.T) {
 	const src = "package foo\n\nfunc Foo() int { return 1 }\n"
 	root := realSourceRoot(t, "foo.go", src)
 	r := &covlens.Report{
-		DiffCoverage:  85.5,
+		Diff: &covlens.DiffSection{
+			Status:    covlens.DiffStatusMeasured,
+			Coverage:  85.5,
+			Threshold: 80,
+			Passed:    true,
+		},
 		TotalCoverage: 78.0,
-		DiffPassed:    true,
 		TotalPassed:   true,
 		SourceRoot:    root,
 		Files: []covlens.FileCoverage{
@@ -76,9 +80,9 @@ func TestGenerate_HappyPath_DiffMode(t *testing.T) {
 
 func TestGenerate_FullMode_OmitsBaseBranch(t *testing.T) {
 	r := &covlens.Report{
+		// Diff is nil in full mode.
 		TotalCoverage: 78.0,
 		TotalPassed:   true,
-		DiffPassed:    true, // ignored in full mode
 		Files:         []covlens.FileCoverage{{Path: "foo.go", Coverage: 78.0}},
 	}
 	cfg := covlens.Config{TotalThreshold: 70, FullMode: true}
@@ -95,8 +99,10 @@ func TestGenerate_FullMode_OmitsBaseBranch(t *testing.T) {
 
 func TestGenerate_RatchetWithBaseline_Positive(t *testing.T) {
 	r := &covlens.Report{
-		DiffCoverage: 95.0, TotalCoverage: 80.0, BaselineTotalCoverage: 75.0,
-		DiffPassed: true, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 80.0, BaselineTotalCoverage: 75.0, TotalPassed: true,
 		Files: []covlens.FileCoverage{{Path: "foo.go", Coverage: 95}},
 	}
 	cfg := covlens.Config{DiffThreshold: 80, RatchetTotal: true}
@@ -114,8 +120,10 @@ func TestGenerate_RatchetWithBaseline_Positive(t *testing.T) {
 
 func TestGenerate_RatchetWithBaseline_Negative(t *testing.T) {
 	r := &covlens.Report{
-		DiffCoverage: 95.0, TotalCoverage: 70.0, BaselineTotalCoverage: 75.0,
-		DiffPassed: true, TotalPassed: false,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 70.0, BaselineTotalCoverage: 75.0, TotalPassed: false,
 		Files: []covlens.FileCoverage{{Path: "foo.go", Coverage: 95}},
 	}
 	cfg := covlens.Config{DiffThreshold: 80, RatchetTotal: true}
@@ -132,8 +140,10 @@ func TestGenerate_NoRatchetBaseline_NeutralDelta(t *testing.T) {
 	// computed). Generate falls through to non-ratchet behavior; HasDelta
 	// is false and the delta class stays neutral.
 	r := &covlens.Report{
-		DiffCoverage: 95.0, TotalCoverage: 70.0, BaselineTotalCoverage: 0,
-		DiffPassed: true, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 70.0, BaselineTotalCoverage: 0, TotalPassed: true,
 		Files: []covlens.FileCoverage{{Path: "foo.go", Coverage: 95}},
 	}
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 60, RatchetTotal: true}
@@ -151,8 +161,11 @@ func TestGenerate_NoRatchetBaseline_NeutralDelta(t *testing.T) {
 
 func TestGenerate_ThemeForcedDark(t *testing.T) {
 	r := &covlens.Report{
-		DiffPassed: true, TotalPassed: true,
-		Files: []covlens.FileCoverage{{Path: "foo.go", Coverage: 90}},
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Threshold: 80, Passed: true,
+		},
+		TotalPassed: true,
+		Files:       []covlens.FileCoverage{{Path: "foo.go", Coverage: 90}},
 	}
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
 	cfg.HTML.Theme = "dark"
@@ -166,8 +179,11 @@ func TestGenerate_ThemeForcedDark(t *testing.T) {
 
 func TestGenerate_ThemeForcedLight(t *testing.T) {
 	r := &covlens.Report{
-		DiffPassed: true, TotalPassed: true,
-		Files: []covlens.FileCoverage{{Path: "foo.go", Coverage: 90}},
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Threshold: 80, Passed: true,
+		},
+		TotalPassed: true,
+		Files:       []covlens.FileCoverage{{Path: "foo.go", Coverage: 90}},
 	}
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
 	cfg.HTML.Theme = "light"
@@ -193,7 +209,12 @@ func TestGenerate_ShowExcludedAffectsFileCount(t *testing.T) {
 	cfgShown := cfgHidden
 	cfgShown.ShowExcluded = true
 
-	r := &covlens.Report{DiffPassed: true, TotalPassed: true, Files: files}
+	r := &covlens.Report{
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Threshold: 80, Passed: true,
+		},
+		TotalPassed: true, Files: files,
+	}
 
 	hidden := readGenerated(t, r, cfgHidden)
 	shown := readGenerated(t, r, cfgShown)
@@ -214,8 +235,11 @@ func TestGenerate_RenderSourceFailure_PropagatesError(t *testing.T) {
 	// SourceRoot points at a real dir, but the Source's Path doesn't exist.
 	// RenderSource should fail; Generate should propagate the error.
 	r := &covlens.Report{
-		DiffPassed: true, TotalPassed: true,
-		SourceRoot: t.TempDir(),
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Threshold: 80, Passed: true,
+		},
+		TotalPassed: true,
+		SourceRoot:  t.TempDir(),
 		Files: []covlens.FileCoverage{
 			{Path: "missing.go", Coverage: 50},
 		},
@@ -234,7 +258,12 @@ func TestGenerate_RenderSourceFailure_PropagatesError(t *testing.T) {
 }
 
 func TestGenerate_OutputCreationFailure_PropagatesError(t *testing.T) {
-	r := &covlens.Report{DiffPassed: true, TotalPassed: true}
+	r := &covlens.Report{
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Threshold: 80, Passed: true,
+		},
+		TotalPassed: true,
+	}
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
 
 	// Use a path inside a non-existent parent directory; os.Create fails

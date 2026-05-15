@@ -13,17 +13,20 @@ import (
 
 func TestEncode_RoundTrip(t *testing.T) {
 	in := Report{
-		Schema:                SchemaVersion,
-		Mode:                  "diff",
-		BaseBranch:            "main",
-		DiffCoverage:          82.5,
+		Schema:     SchemaVersion,
+		Mode:       "diff",
+		BaseBranch: "main",
+		Diff: &DiffSection{
+			Status:    string(covlens.DiffStatusMeasured),
+			Coverage:  82.5,
+			Threshold: 80,
+			Passed:    true,
+		},
 		TotalCoverage:         71.0,
 		BaselineTotalCoverage: 70.5,
-		DiffThreshold:         80,
 		TotalThreshold:        70,
-		RatchetTotal:          true,
-		DiffPassed:            true,
 		TotalPassed:           true,
+		RatchetTotal:          true,
 		HTMLReportPath:        "/tmp/coverage_report.html",
 		Files: []File{
 			{Path: "foo.go", Package: "example/foo", Coverage: 100, Statements: 5, Covered: 5, Status: "ok"},
@@ -48,8 +51,14 @@ func TestEncode_RoundTrip(t *testing.T) {
 	if got.Mode != "diff" {
 		t.Errorf("Mode = %q, want %q", got.Mode, "diff")
 	}
-	if got.DiffCoverage != 82.5 {
-		t.Errorf("DiffCoverage = %v, want 82.5", got.DiffCoverage)
+	if got.Diff == nil {
+		t.Fatal("Diff = nil, want a populated DiffSection")
+	}
+	if got.Diff.Coverage != 82.5 {
+		t.Errorf("Diff.Coverage = %v, want 82.5", got.Diff.Coverage)
+	}
+	if got.Diff.Status != "measured" {
+		t.Errorf("Diff.Status = %q, want %q", got.Diff.Status, "measured")
 	}
 	if !got.RatchetTotal {
 		t.Error("RatchetTotal = false, want true")
@@ -71,13 +80,14 @@ func TestEncode_RoundTrip(t *testing.T) {
 func TestEncode_OmitsEmptyOptionalFields(t *testing.T) {
 	// Minimal Report — exercises omitempty on RatchetTotal, baseline, htmlReportPath, etc.
 	in := Report{
-		Schema:         SchemaVersion,
-		Mode:           "diff",
-		DiffCoverage:   0,
-		TotalCoverage:  0,
-		DiffThreshold:  80,
+		Schema: SchemaVersion,
+		Mode:   "diff",
+		Diff: &DiffSection{
+			Status:    string(covlens.DiffStatusMeasured),
+			Threshold: 80,
+			Passed:    true,
+		},
 		TotalThreshold: 70,
-		DiffPassed:     true,
 		TotalPassed:    true,
 		Files:          []File{},
 	}
@@ -89,7 +99,7 @@ func TestEncode_OmitsEmptyOptionalFields(t *testing.T) {
 	out := buf.String()
 
 	// Required fields must always appear.
-	for _, want := range []string{`"schema"`, `"mode"`, `"diffCoverage"`, `"diffPassed"`, `"files"`} {
+	for _, want := range []string{`"schema"`, `"mode"`, `"diff"`, `"totalPassed"`, `"files"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing required field %s\n%s", want, out)
 		}
@@ -108,9 +118,13 @@ func TestWrite(t *testing.T) {
 
 	report := &covlens.Report{
 		TotalCoverage: 85.0,
-		DiffCoverage:  90.0,
-		DiffPassed:    true,
 		TotalPassed:   true,
+		Diff: &covlens.DiffSection{
+			Status:    covlens.DiffStatusMeasured,
+			Coverage:  90.0,
+			Threshold: 80,
+			Passed:    true,
+		},
 		Files: []covlens.FileCoverage{
 			{Path: "foo.go", Package: "pkg", Coverage: 90.0, Statements: 10, Covered: 9},
 			{Path: "bar.go", Excluded: true, Coverage: -1},
@@ -138,6 +152,9 @@ func TestWrite(t *testing.T) {
 	if got.TotalCoverage != 85.0 {
 		t.Errorf("TotalCoverage = %v, want 85.0", got.TotalCoverage)
 	}
+	if got.Diff == nil || got.Diff.Coverage != 90.0 {
+		t.Errorf("Diff.Coverage missing or wrong; got %+v", got.Diff)
+	}
 	if got.HTMLReportPath != "/tmp/report.html" {
 		t.Errorf("HTMLReportPath = %q, want /tmp/report.html", got.HTMLReportPath)
 	}
@@ -153,7 +170,7 @@ func TestWrite_FullMode(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "report.json")
 
-	report := &covlens.Report{TotalCoverage: 75.0, TotalPassed: true, DiffPassed: true}
+	report := &covlens.Report{TotalCoverage: 75.0, TotalPassed: true}
 	cfg := covlens.Config{TotalThreshold: 70, DiffThreshold: 80, FullMode: true}
 
 	if err := Write(report, cfg, "", path); err != nil {
@@ -166,5 +183,8 @@ func TestWrite_FullMode(t *testing.T) {
 
 	if got.Mode != "full" {
 		t.Errorf("Mode = %q, want full", got.Mode)
+	}
+	if got.Diff != nil {
+		t.Errorf("Diff = %+v, want nil in full mode", got.Diff)
 	}
 }

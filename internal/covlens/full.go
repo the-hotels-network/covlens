@@ -113,7 +113,6 @@ func (r *runner) runFull() (*Report, error) {
 	return &Report{
 		TotalCoverage: totalCov,
 		TotalPassed:   totalCov >= r.cfg.TotalThreshold,
-		DiffPassed:    true,
 		Files:         fileCoverages,
 		Sources:       sources,
 		OutputDir:     r.outputDir,

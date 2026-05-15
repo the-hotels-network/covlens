@@ -42,9 +42,13 @@ func assertNotContains(t *testing.T, got string, banned ...string) {
 func TestPrintSummary_DiffMode_AllPass(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
 	report := &covlens.Report{
-		DiffCoverage:  92.5,
+		Diff: &covlens.DiffSection{
+			Status:    covlens.DiffStatusMeasured,
+			Coverage:  92.5,
+			Threshold: 80,
+			Passed:    true,
+		},
 		TotalCoverage: 78.0,
-		DiffPassed:    true,
 		TotalPassed:   true,
 		Files: []covlens.FileCoverage{
 			{Path: "foo.go", Coverage: 92.5},
@@ -67,8 +71,10 @@ func TestPrintSummary_DiffMode_AllPass(t *testing.T) {
 func TestPrintSummary_DiffMode_DiffFailed(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
 	report := &covlens.Report{
-		DiffCoverage: 50.0, TotalCoverage: 78.0,
-		DiffPassed: false, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 50.0, Threshold: 80, Passed: false,
+		},
+		TotalCoverage: 78.0, TotalPassed: true,
 	}
 
 	var buf bytes.Buffer
@@ -83,8 +89,10 @@ func TestPrintSummary_DiffMode_DiffFailed(t *testing.T) {
 func TestPrintSummary_DiffMode_TotalFailed(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
 	report := &covlens.Report{
-		DiffCoverage: 92.0, TotalCoverage: 50.0,
-		DiffPassed: true, TotalPassed: false,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 92.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 50.0, TotalPassed: false,
 	}
 
 	var buf bytes.Buffer
@@ -99,8 +107,8 @@ func TestPrintSummary_DiffMode_TotalFailed(t *testing.T) {
 func TestPrintSummary_FullMode_SkipsDiffSection(t *testing.T) {
 	cfg := covlens.Config{TotalThreshold: 70, FullMode: true}
 	report := &covlens.Report{
+		// Diff is nil in full mode.
 		TotalCoverage: 78.0, TotalPassed: true,
-		DiffPassed: true, // ignored in full mode
 	}
 
 	var buf bytes.Buffer
@@ -117,8 +125,10 @@ func TestPrintSummary_FullMode_SkipsDiffSection(t *testing.T) {
 func TestPrintSummary_Ratchet_WithBaseline_DidNotDrop(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, RatchetTotal: true}
 	report := &covlens.Report{
-		DiffCoverage: 95.0, TotalCoverage: 78.5, BaselineTotalCoverage: 78.0,
-		DiffPassed: true, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 78.5, BaselineTotalCoverage: 78.0, TotalPassed: true,
 	}
 
 	var buf bytes.Buffer
@@ -137,8 +147,10 @@ func TestPrintSummary_Ratchet_WithBaseline_DidNotDrop(t *testing.T) {
 func TestPrintSummary_Ratchet_WithBaseline_Dropped(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, RatchetTotal: true}
 	report := &covlens.Report{
-		DiffCoverage: 95.0, TotalCoverage: 70.0, BaselineTotalCoverage: 78.0,
-		DiffPassed: true, TotalPassed: false,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 70.0, BaselineTotalCoverage: 78.0, TotalPassed: false,
 	}
 
 	var buf bytes.Buffer
@@ -157,8 +169,10 @@ func TestPrintSummary_Ratchet_WithBaseline_Dropped(t *testing.T) {
 func TestPrintSummary_Ratchet_BaselineZero(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, RatchetTotal: true}
 	report := &covlens.Report{
-		DiffCoverage: 95.0, TotalCoverage: 78.0, BaselineTotalCoverage: 0,
-		DiffPassed: true, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 78.0, BaselineTotalCoverage: 0, TotalPassed: true,
 	}
 
 	var buf bytes.Buffer
@@ -174,8 +188,10 @@ func TestPrintSummary_Ratchet_BaselineZero(t *testing.T) {
 func TestPrintSummary_NoFiles_SkipsFilesSection(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
 	report := &covlens.Report{
-		DiffCoverage: 92.0, TotalCoverage: 78.0,
-		DiffPassed: true, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 92.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 78.0, TotalPassed: true,
 		Files: nil,
 	}
 
@@ -188,7 +204,10 @@ func TestPrintSummary_NoFiles_SkipsFilesSection(t *testing.T) {
 func TestPrintSummary_FileStatuses(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, ShowExcluded: true}
 	report := &covlens.Report{
-		DiffPassed: true, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Threshold: 80, Passed: true,
+		},
+		TotalPassed: true,
 		Files: []covlens.FileCoverage{
 			{Path: "ok.go", Coverage: 95.0},
 			{Path: "fail.go", Coverage: 40.0},
@@ -215,7 +234,10 @@ func TestPrintSummary_FileStatuses(t *testing.T) {
 func TestPrintSummary_HidesExcludedWhenConfigured(t *testing.T) {
 	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70} // ShowExcluded zero = false
 	report := &covlens.Report{
-		DiffPassed: true, TotalPassed: true,
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Threshold: 80, Passed: true,
+		},
+		TotalPassed: true,
 		Files: []covlens.FileCoverage{
 			{Path: "kept.go", Coverage: 90},
 			{Path: "mocks.go", Coverage: -1, Excluded: true},

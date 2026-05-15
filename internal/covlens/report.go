@@ -2,19 +2,50 @@ package covlens
 
 import "golang.org/x/tools/cover"
 
+// DiffStatus classifies the diff portion of a run. Used by callers to choose
+// between rendering diff coverage metrics and rendering an explanatory chip
+// when the diff is not meaningfully measurable.
+type DiffStatus string
+
+const (
+	// DiffStatusMeasured: the diff contained measurable Go code; Coverage
+	// and Passed reflect a real measurement against Threshold.
+	DiffStatusMeasured DiffStatus = "measured"
+	// DiffStatusNoGoChanges: no Go files appeared in the diff at all
+	// (e.g., a docs-only PR). Passed is vacuously true.
+	DiffStatusNoGoChanges DiffStatus = "no-go-changes"
+	// DiffStatusOnlyDeletions: every changed Go file was a pure deletion.
+	// Passed is vacuously true.
+	DiffStatusOnlyDeletions DiffStatus = "only-deletions"
+	// DiffStatusAllExcluded: Go files were changed but every one matched
+	// exclude_files. Passed is vacuously true.
+	DiffStatusAllExcluded DiffStatus = "all-excluded"
+)
+
+// DiffSection holds the diff portion of a run. Self-contained: a consumer
+// holding only a *DiffSection can interpret pass/fail without consulting
+// Config. Threshold captures the value the run was evaluated against.
+type DiffSection struct {
+	Status    DiffStatus
+	Coverage  float64
+	Threshold float64
+	Passed    bool
+}
+
 // Report holds the results of a coverage analysis run.
 //
-// Library consumers who only need numeric coverage should read DiffCoverage,
-// TotalCoverage, and Files. The Sources slice is a separate channel of raw
-// per-file rendering inputs intended for printers that produce source views
-// (e.g. the HTML printer). Consumers that don't render source can ignore it.
+// Diff is nil in --full mode (no diff is computed). In diff mode it is always
+// non-nil; consumers should check Diff.Status to distinguish measured runs
+// from vacuous-pass cases (no Go changes, only deletions, all excluded).
 type Report struct {
-	DiffCoverage          float64
+	// Diff is the diff portion of the run. Nil in --full mode.
+	Diff *DiffSection
+
 	TotalCoverage         float64
 	BaselineTotalCoverage float64 // set when RatchetTotal is true, otherwise 0
-	DiffPassed            bool
 	TotalPassed           bool
-	Files                 []FileCoverage
+
+	Files []FileCoverage
 	// OutputDir is the absolute path to the directory where coverage
 	// profiles were written. Printers (e.g. the HTML renderer) typically
 	// write their output here.
@@ -29,12 +60,6 @@ type Report struct {
 	// files with no profile data are NOT in this slice — only files with
 	// renderable content appear here.
 	Sources []SourceData
-	// OnlyDeletions is true when every changed Go file in this run was a
-	// pure deletion. Lets callers distinguish "no Go files in diff" (Files
-	// empty, OnlyDeletions false) from "Go files changed but all deleted"
-	// (Files empty, OnlyDeletions true) — both produce an empty Files
-	// slice but warrant different user-facing messages.
-	OnlyDeletions bool
 }
 
 // FileCoverage holds coverage data for a single source file.

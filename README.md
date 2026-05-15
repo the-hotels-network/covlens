@@ -102,11 +102,14 @@ The JSON sidecar is the integration point for CI tooling. Key fields:
 {
   "schema": "1",
   "mode": "diff",
-  "diffCoverage": 92.5,
+  "diff": {
+    "status": "measured",
+    "coverage": 92.5,
+    "threshold": 80,
+    "passed": true
+  },
   "totalCoverage": 78.4,
-  "diffThreshold": 80,
   "totalThreshold": 70,
-  "diffPassed": true,
   "totalPassed": true,
   "htmlReportPath": "/abs/path/to/coverage_report.html",
   "files": [
@@ -114,6 +117,8 @@ The JSON sidecar is the integration point for CI tooling. Key fields:
   ]
 }
 ```
+
+`diff` is omitted in `--full` mode (no diff is computed). `diff.status` is one of `"measured"`, `"no-go-changes"`, `"only-deletions"`, or `"all-excluded"` — the non-measured values indicate a vacuous pass (`diff.passed: true` but no measurement is meaningful).
 
 `schema` is bumped on breaking changes; new fields are additive. The full type lives in `internal/printer/json`.
 

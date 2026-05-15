@@ -268,21 +268,27 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 	}
 
 	measurable := 0
+	allDeleted := len(subjects.files) > 0
 	for _, fs := range subjects.files {
 		if !fs.excluded && !fs.deleted {
 			measurable++
 		}
+		if !fs.deleted {
+			allDeleted = false
+		}
 	}
 
-	onlyDeletions := false
-	if len(subjects.files) > 0 {
-		onlyDeletions = true
-		for _, fs := range subjects.files {
-			if !fs.deleted {
-				onlyDeletions = false
-				break
-			}
-		}
+	diffPassed := measurable == 0 || stats.diffCov >= r.cfg.DiffThreshold
+	diffStatus := DiffStatusMeasured
+	switch {
+	case len(subjects.files) == 0:
+		diffStatus = DiffStatusNoGoChanges
+	case allDeleted:
+		diffStatus = DiffStatusOnlyDeletions
+	case measurable == 0:
+		// Files were changed and not all deleted, yet nothing is
+		// measurable → every remaining changed file is excluded.
+		diffStatus = DiffStatusAllExcluded
 	}
 
 	totalPassed := stats.totalCov >= r.cfg.TotalThreshold
@@ -321,15 +327,18 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 	}
 
 	return &Report{
-		DiffCoverage:          stats.diffCov,
+		Diff: &DiffSection{
+			Status:    diffStatus,
+			Coverage:  stats.diffCov,
+			Threshold: r.cfg.DiffThreshold,
+			Passed:    diffPassed,
+		},
 		TotalCoverage:         stats.totalCov,
 		BaselineTotalCoverage: stats.baselineCov,
-		DiffPassed:            measurable == 0 || stats.diffCov >= r.cfg.DiffThreshold,
 		TotalPassed:           totalPassed,
 		Files:                 files,
 		OutputDir:             r.outputDir,
 		SourceRoot:            scope.repoRoot,
 		Sources:               sources,
-		OnlyDeletions:         onlyDeletions,
 	}
 }

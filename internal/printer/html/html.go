@@ -34,19 +34,19 @@ type sourceFile struct {
 // reportInput is the flat per-template payload the existing template expects.
 // Internal to this package — built from covlens.Report + covlens.Config.
 type reportInput struct {
+	DiffStatus            covlens.DiffStatus
 	DiffCoverage          float64
+	DiffThreshold         float64
+	DiffPassed            bool
 	TotalCoverage         float64
 	BaselineTotalCoverage float64
-	DiffPassed            bool
 	TotalPassed           bool
-	DiffThreshold         float64
 	TotalThreshold        float64
 	BaseBranch            string
 	ShowExcluded          bool
 	RatchetTotal          bool
 	Theme                 string
 	FullMode              bool
-	OnlyDeletions         bool
 	Files                 []fileSummary
 }
 
@@ -125,20 +125,22 @@ func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 	}
 
 	input := reportInput{
-		DiffCoverage:          r.DiffCoverage,
 		TotalCoverage:         r.TotalCoverage,
 		BaselineTotalCoverage: r.BaselineTotalCoverage,
-		DiffPassed:            r.DiffPassed,
 		TotalPassed:           r.TotalPassed,
-		DiffThreshold:         cfg.DiffThreshold,
 		TotalThreshold:        cfg.TotalThreshold,
 		BaseBranch:            cfg.BaseBranch,
 		ShowExcluded:          cfg.ShowExcluded,
 		RatchetTotal:          cfg.RatchetTotal,
 		Theme:                 cfg.HTML.Theme,
 		FullMode:              cfg.FullMode,
-		OnlyDeletions:         r.OnlyDeletions,
 		Files:                 files,
+	}
+	if r.Diff != nil {
+		input.DiffStatus = r.Diff.Status
+		input.DiffCoverage = r.Diff.Coverage
+		input.DiffThreshold = r.Diff.Threshold
+		input.DiffPassed = r.Diff.Passed
 	}
 
 	fileCount := 0

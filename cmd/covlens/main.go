@@ -85,10 +85,16 @@ func main() {
 		jsonPath = ""
 	}
 
-	if len(report.Files) == 0 {
-		msg := "No changed Go files detected relative to '" + cfg.BaseBranch + "'."
-		if report.OnlyDeletions {
+	// Short-circuit cases A and B-del: no Files to render, no useful
+	// per-file summary. B-exc keeps the full flow (it has excluded
+	// entries in Files and a meaningful total to report).
+	if report.Diff != nil && (report.Diff.Status == covlens.DiffStatusNoGoChanges || report.Diff.Status == covlens.DiffStatusOnlyDeletions) {
+		var msg string
+		switch report.Diff.Status {
+		case covlens.DiffStatusOnlyDeletions:
 			msg = "All changed Go files were deleted; nothing to measure."
+		default:
+			msg = "No changed Go files detected relative to '" + cfg.BaseBranch + "'."
 		}
 		console.Info(os.Stdout, msg)
 		if htmlPath != "" {
@@ -112,7 +118,8 @@ func main() {
 		console.Info(os.Stdout, "JSON report: "+jsonPath)
 	}
 
-	if !report.DiffPassed || !report.TotalPassed {
+	diffPassed := report.Diff == nil || report.Diff.Passed
+	if !diffPassed || !report.TotalPassed {
 		console.Error(os.Stderr, "Coverage insufficient. Review the report for uncovered lines.")
 		os.Exit(1)
 	}

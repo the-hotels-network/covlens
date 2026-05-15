@@ -105,5 +105,13 @@ func (r *runner) run() (*Report, error) {
 }
 
 func (r *runner) emptyReport() *Report {
-	return &Report{DiffPassed: true, TotalPassed: true, OutputDir: r.outputDir}
+	return &Report{
+		Diff: &DiffSection{
+			Status:    DiffStatusNoGoChanges,
+			Threshold: r.cfg.DiffThreshold,
+			Passed:    true,
+		},
+		TotalPassed: true,
+		OutputDir:   r.outputDir,
+	}
 }

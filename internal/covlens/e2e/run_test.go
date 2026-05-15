@@ -62,16 +62,22 @@ func TestRun_DiffCoverage(t *testing.T) {
 	if foo.Coverage < 30 || foo.Coverage > 70 {
 		t.Errorf("foo.go diff coverage = %.1f%%, want ~50%%", foo.Coverage)
 	}
-	if report.DiffCoverage < 30 || report.DiffCoverage > 70 {
-		t.Errorf("DiffCoverage = %.1f%%, want ~50%%", report.DiffCoverage)
+	if report.Diff == nil {
+		t.Fatal("Diff = nil; want a populated DiffSection in diff mode")
+	}
+	if report.Diff.Status != covlens.DiffStatusMeasured {
+		t.Errorf("Diff.Status = %q, want %q", report.Diff.Status, covlens.DiffStatusMeasured)
+	}
+	if report.Diff.Coverage < 30 || report.Diff.Coverage > 70 {
+		t.Errorf("Diff.Coverage = %.1f%%, want ~50%%", report.Diff.Coverage)
 	}
 	if report.TotalCoverage <= 0 {
 		t.Errorf("TotalCoverage = %.1f%%, expected > 0", report.TotalCoverage)
 	}
 
-	if !report.DiffPassed {
-		t.Errorf("DiffPassed = false (threshold %.0f, coverage %.1f)",
-			cfg.DiffThreshold, report.DiffCoverage)
+	if !report.Diff.Passed {
+		t.Errorf("Diff.Passed = false (threshold %.0f, coverage %.1f)",
+			cfg.DiffThreshold, report.Diff.Coverage)
 	}
 	if !report.TotalPassed {
 		t.Errorf("TotalPassed = false (threshold %.0f, coverage %.1f)",
@@ -110,9 +116,15 @@ func TestRun_NoChangedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !report.DiffPassed || !report.TotalPassed {
-		t.Errorf("expected both passes for empty diff; got DiffPassed=%v TotalPassed=%v",
-			report.DiffPassed, report.TotalPassed)
+	if report.Diff == nil {
+		t.Fatal("Diff = nil; want a DiffSection even for an empty diff")
+	}
+	if report.Diff.Status != covlens.DiffStatusNoGoChanges {
+		t.Errorf("Diff.Status = %q, want %q", report.Diff.Status, covlens.DiffStatusNoGoChanges)
+	}
+	if !report.Diff.Passed || !report.TotalPassed {
+		t.Errorf("expected both passes for empty diff; got Diff.Passed=%v TotalPassed=%v",
+			report.Diff.Passed, report.TotalPassed)
 	}
 	if len(report.Files) != 0 {
 		t.Errorf("expected 0 files for docs-only change, got %d: %+v", len(report.Files), report.Files)
@@ -332,8 +344,11 @@ func TestRun_DiffMode_OnlyDeletions(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if !report.DiffPassed {
-		t.Errorf("DiffPassed = false — should be vacuously true for deletion-only diff (DiffCoverage=%.1f%%)", report.DiffCoverage)
+	if report.Diff == nil {
+		t.Fatal("Diff = nil; want a DiffSection")
+	}
+	if !report.Diff.Passed {
+		t.Errorf("Diff.Passed = false — should be vacuously true for deletion-only diff (Coverage=%.1f%%)", report.Diff.Coverage)
 	}
 	if !report.TotalPassed {
 		t.Errorf("TotalPassed = false (TotalCoverage=%.1f%%)", report.TotalCoverage)
@@ -341,8 +356,8 @@ func TestRun_DiffMode_OnlyDeletions(t *testing.T) {
 	if len(report.Files) != 0 {
 		t.Errorf("expected 0 files for deletion-only diff, got %d: %+v", len(report.Files), report.Files)
 	}
-	if !report.OnlyDeletions {
-		t.Errorf("OnlyDeletions = false; want true for a diff consisting entirely of deletions")
+	if report.Diff.Status != covlens.DiffStatusOnlyDeletions {
+		t.Errorf("Diff.Status = %q, want %q", report.Diff.Status, covlens.DiffStatusOnlyDeletions)
 	}
 }
 
@@ -390,8 +405,14 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if !report.DiffPassed {
-		t.Errorf("DiffPassed = false — should be vacuously true when all changed files are excluded (DiffCoverage=%.1f%%)", report.DiffCoverage)
+	if report.Diff == nil {
+		t.Fatal("Diff = nil; want a DiffSection")
+	}
+	if !report.Diff.Passed {
+		t.Errorf("Diff.Passed = false — should be vacuously true when all changed files are excluded (Coverage=%.1f%%)", report.Diff.Coverage)
+	}
+	if report.Diff.Status != covlens.DiffStatusAllExcluded {
+		t.Errorf("Diff.Status = %q, want %q", report.Diff.Status, covlens.DiffStatusAllExcluded)
 	}
 	if !report.TotalPassed {
 		t.Errorf("TotalPassed = false (TotalCoverage=%.1f%%)", report.TotalCoverage)

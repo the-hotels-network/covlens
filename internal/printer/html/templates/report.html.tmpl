@@ -36,7 +36,7 @@
 
   {{if eq (len .Files) 0}}
   <div class="status-bar status-pass">
-    &#10004; {{if .OnlyDeletions}}All changed Go files were deleted; nothing to measure.{{else}}No Go files changed relative to <code>{{.BaseBranch}}</code>; nothing to measure.{{end}}
+    &#10004; {{if eq .DiffStatus "only-deletions"}}All changed Go files were deleted; nothing to measure.{{else}}No Go files changed relative to <code>{{.BaseBranch}}</code>; nothing to measure.{{end}}
   </div>
   {{else}}
   <!-- Status bar -->
@@ -49,6 +49,13 @@
   <!-- Badges -->
   <div class="badges">
     {{if not .FullMode}}
+    {{if eq .DiffStatus "all-excluded"}}
+    <div class="badge badge-neutral">
+      <h2>&ndash;</h2>
+      <p>Diff coverage (changed lines)</p>
+      <div class="threshold">All changed Go files excluded by <code>exclude_files</code></div>
+    </div>
+    {{else}}
     <div class="badge {{if .DiffPassed}}badge-ok{{else}}badge-fail{{end}}">
       <h2>{{printf "%.1f" .DiffCoverage}}%</h2>
       <p>Diff coverage (changed lines)</p>
@@ -57,6 +64,7 @@
         {{if .DiffPassed}}&#10004;{{else}}&#10008;{{end}}
       </div>
     </div>
+    {{end}}
     {{if .HasDelta}}
     <div class="badge badge-delta-{{.DeltaClass}}">
       <h2>{{if gt .CoverageDelta 0.0}}+{{end}}{{printf "%.2f" .CoverageDelta}}pp</h2>
