@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -76,20 +77,38 @@ func isTTY(w io.Writer) bool {
 // would cause cursor-up to undershoot and expand the window indefinitely.
 const maxProgressLineWidth = 140
 
-// tailTestWindow polls path every testLogTailInterval, printing the last
-// testLogTailLines lines in-place using ANSI cursor-up overwrite.
-// On stop, it erases the progress window so the caller can print cleanly.
+// pkgCompletionRe matches `go test` lines emitted when a package finishes:
+//
+//	ok      pkg/path    0.123s    coverage: 12.3% of statements
+//	FAIL    pkg/path    0.456s
+//	?       pkg/path    [no test files]
+//
+// Indented coverage-only lines (emitted by -coverpkg for packages with no
+// own tests) start with whitespace and do not match.
+var pkgCompletionRe = regexp.MustCompile(`^(ok|FAIL|\?)\s`)
+
+// tailTestWindow polls path every testLogTailInterval. It renders a status
+// line (elapsed · packages done · time since last output) followed by the
+// last testLogTailLines lines, in-place using ANSI cursor-up overwrite.
+// The "time since last output" field grows whenever the log file stops
+// growing — a direct liveness signal for stuck/hung test runs.
+// On stop, it erases the window so the caller can print cleanly.
 func tailTestWindow(path string, w io.Writer, stop <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(testLogTailInterval)
 	defer ticker.Stop()
-	var prev []string
+
+	start := time.Now()
+	lastActivity := start
+	var lastSize int64
+	var prevTail []string
+	var prevStatus string
 	written := 0
+
 	for {
 		select {
 		case <-stop:
 			if written > 0 {
-				// Move cursor to start of window, erase each line, leave cursor there.
 				fmt.Fprintf(w, "\033[%dA\r", written)
 				for i := 0; i < written; i++ {
 					fmt.Fprintf(w, "\033[2K\n")
@@ -98,56 +117,75 @@ func tailTestWindow(path string, w io.Writer, stop <-chan struct{}, done chan<- 
 			}
 			return
 		case <-ticker.C:
-			lines := lastNLogLines(path, testLogTailLines)
-			if len(lines) == 0 || slices.Equal(lines, prev) {
+			size, completed, tail := scanLog(path, testLogTailLines)
+			if size > lastSize {
+				lastActivity = time.Now()
+				lastSize = size
+			}
+			status := fmt.Sprintf("\033[0;34m▶\033[0m %s elapsed · %d pkg done · %s since last output",
+				fmtElapsed(time.Since(start)), completed, fmtElapsed(time.Since(lastActivity)))
+			if status == prevStatus && slices.Equal(tail, prevTail) {
 				continue
 			}
 			if written > 0 {
 				fmt.Fprintf(w, "\033[%dA\r", written)
 			}
-			for _, line := range lines {
+			fmt.Fprintf(w, "\033[K%s\n", status)
+			for _, line := range tail {
 				if len(line) > maxProgressLineWidth {
 					line = line[:maxProgressLineWidth-1] + "…"
 				}
 				fmt.Fprintf(w, "\033[K\033[0;34m▶\033[0m %s\n", line)
 			}
-			written = len(lines)
-			prev = lines
+			written = 1 + len(tail)
+			prevStatus = status
+			prevTail = tail
 		}
 	}
 }
 
-// lastNLogLines returns up to n non-empty lines from the tail of path by
-// reading the final 4 KiB — enough to find recent output without scanning
-// the whole file.
-func lastNLogLines(path string, n int) []string {
+// scanLog walks the entire log file, counting package-completion lines and
+// capturing the last n non-empty lines. Returns the file size so callers
+// can detect "no new bytes since last tick" → stuck.
+func scanLog(path string, n int) (size int64, completed int, tail []string) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return
 	}
 	defer f.Close()
-
-	size, err := f.Seek(0, io.SeekEnd)
-	if err != nil || size == 0 {
-		return nil
+	info, err := f.Stat()
+	if err != nil {
+		return
 	}
-	const tailBytes = 4096
-	start := size - tailBytes
-	if start < 0 {
-		start = 0
-	}
-	if _, err := f.Seek(start, io.SeekStart); err != nil {
-		return nil
-	}
+	size = info.Size()
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	var lines []string
 	for scanner.Scan() {
-		if t := strings.TrimSpace(scanner.Text()); t != "" {
-			lines = append(lines, t)
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
 		}
+		if pkgCompletionRe.MatchString(line) {
+			completed++
+		}
+		lines = append(lines, line)
 	}
-	if len(lines) <= n {
-		return lines
+	if len(lines) > n {
+		tail = lines[len(lines)-n:]
+	} else {
+		tail = lines
 	}
-	return lines[len(lines)-n:]
+	return
+}
+
+func fmtElapsed(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm%02ds", int(d/time.Minute), int((d%time.Minute)/time.Second))
+	}
+	return fmt.Sprintf("%dh%02dm", int(d/time.Hour), int((d%time.Hour)/time.Minute))
 }

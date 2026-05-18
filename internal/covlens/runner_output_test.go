@@ -81,7 +81,7 @@ func TestOpenTestOutputLog(t *testing.T) {
 	})
 }
 
-func TestLastNLogLines(t *testing.T) {
+func TestScanLog(t *testing.T) {
 	writeLines := func(t *testing.T, lines []string) string {
 		t.Helper()
 		f, err := os.CreateTemp(t.TempDir(), "log")
@@ -95,43 +95,92 @@ func TestLastNLogLines(t *testing.T) {
 		return f.Name()
 	}
 
-	t.Run("nonexistent file returns nil", func(t *testing.T) {
-		if lastNLogLines("/no/such/file.log", 5) != nil {
-			t.Error("expected nil for missing file")
+	t.Run("nonexistent file returns zero values", func(t *testing.T) {
+		size, completed, tail := scanLog("/no/such/file.log", 5)
+		if size != 0 || completed != 0 || tail != nil {
+			t.Errorf("expected zero values, got size=%d completed=%d tail=%v", size, completed, tail)
 		}
 	})
 
-	t.Run("empty file returns nil", func(t *testing.T) {
+	t.Run("empty file returns zero counts", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "empty.log")
 		os.WriteFile(path, nil, 0600)
-		if lastNLogLines(path, 5) != nil {
-			t.Error("expected nil for empty file")
+		size, completed, tail := scanLog(path, 5)
+		if size != 0 || completed != 0 || tail != nil {
+			t.Errorf("expected zeros, got size=%d completed=%d tail=%v", size, completed, tail)
 		}
 	})
 
 	t.Run("fewer lines than n returns all", func(t *testing.T) {
 		path := writeLines(t, []string{"a", "b", "c"})
-		got := lastNLogLines(path, 5)
-		if !slices.Equal(got, []string{"a", "b", "c"}) {
-			t.Errorf("got %v, want [a b c]", got)
+		_, _, tail := scanLog(path, 5)
+		if !slices.Equal(tail, []string{"a", "b", "c"}) {
+			t.Errorf("got %v, want [a b c]", tail)
 		}
 	})
 
 	t.Run("more lines than n returns last n", func(t *testing.T) {
 		path := writeLines(t, []string{"a", "b", "c", "d", "e", "f"})
-		got := lastNLogLines(path, 3)
-		if !slices.Equal(got, []string{"d", "e", "f"}) {
-			t.Errorf("got %v, want [d e f]", got)
+		_, _, tail := scanLog(path, 3)
+		if !slices.Equal(tail, []string{"d", "e", "f"}) {
+			t.Errorf("got %v, want [d e f]", tail)
 		}
 	})
 
 	t.Run("blank lines are skipped", func(t *testing.T) {
 		path := writeLines(t, []string{"a", "", "   ", "b"})
-		got := lastNLogLines(path, 5)
-		if !slices.Equal(got, []string{"a", "b"}) {
-			t.Errorf("got %v, want [a b]", got)
+		_, _, tail := scanLog(path, 5)
+		if !slices.Equal(tail, []string{"a", "b"}) {
+			t.Errorf("got %v, want [a b]", tail)
 		}
 	})
+
+	t.Run("counts ok/FAIL/? lines, ignores indented coverage lines", func(t *testing.T) {
+		path := writeLines(t, []string{
+			"ok\tpkg/a\t0.1s\tcoverage: 80.0% of statements",
+			"FAIL\tpkg/b\t0.2s",
+			"?\tpkg/c\t[no test files]",
+			"    pkg/d\t\tcoverage: 0.0% of statements",
+			"ok\tpkg/e\t0.3s",
+		})
+		_, completed, _ := scanLog(path, 10)
+		if completed != 4 {
+			t.Errorf("got completed=%d, want 4", completed)
+		}
+	})
+
+	t.Run("size reflects file size", func(t *testing.T) {
+		path := writeLines(t, []string{"hello", "world"})
+		size, _, _ := scanLog(path, 5)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if size != info.Size() {
+			t.Errorf("size=%d, want %d", size, info.Size())
+		}
+	})
+}
+
+func TestFmtElapsed(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "0s"},
+		{47 * time.Second, "47s"},
+		{59 * time.Second, "59s"},
+		{60 * time.Second, "1m00s"},
+		{4*time.Minute + 32*time.Second, "4m32s"},
+		{59*time.Minute + 59*time.Second, "59m59s"},
+		{time.Hour, "1h00m"},
+		{2*time.Hour + 15*time.Minute, "2h15m"},
+	}
+	for _, tc := range cases {
+		if got := fmtElapsed(tc.d); got != tc.want {
+			t.Errorf("fmtElapsed(%v) = %q, want %q", tc.d, got, tc.want)
+		}
+	}
 }
 
 func TestIsTTY(t *testing.T) {
@@ -152,8 +201,8 @@ func TestIsTTY(t *testing.T) {
 	}
 }
 
-// TestTailTestWindow verifies that tailTestWindow prints progress lines and
-// erases the window (emitting cursor-up sequences) when stopped.
+// TestTailTestWindow verifies that tailTestWindow prints the status line +
+// tail content, and erases the window (emitting cursor-up sequences) on stop.
 func TestTailTestWindow(t *testing.T) {
 	prev := testLogTailInterval
 	testLogTailInterval = 20 * time.Millisecond
@@ -166,9 +215,9 @@ func TestTailTestWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := range 8 {
-		fmt.Fprintf(f, "line %d\n", i)
-	}
+	fmt.Fprintln(f, "ok\tpkg/a\t0.1s")
+	fmt.Fprintln(f, "ok\tpkg/b\t0.2s")
+	fmt.Fprintln(f, "?\tpkg/c\t[no test files]")
 	f.Close()
 
 	var buf bytes.Buffer
@@ -181,12 +230,16 @@ func TestTailTestWindow(t *testing.T) {
 	<-done
 
 	out := buf.String()
-	// Progress lines must appear.
 	if !strings.Contains(out, "▶") {
-		t.Errorf("expected progress lines, got: %q", out)
+		t.Errorf("expected progress marker, got: %q", out)
 	}
-	// Erase sequences must appear (cursor-up + erase-line) when window was written.
+	if !strings.Contains(out, "elapsed") || !strings.Contains(out, "pkg done") || !strings.Contains(out, "since last output") {
+		t.Errorf("status line missing fields, got: %q", out)
+	}
+	if !strings.Contains(out, "3 pkg done") {
+		t.Errorf("expected '3 pkg done' (ok+ok+?), got: %q", out)
+	}
 	if !strings.Contains(out, "\033[") {
-		t.Errorf("expected ANSI escape sequences in output, got: %q", out)
+		t.Errorf("expected ANSI escape sequences, got: %q", out)
 	}
 }
