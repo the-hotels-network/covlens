@@ -1,0 +1,46 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the covlens binary
+    cmds:
+      - go build -o bin/covlens ./cmd/covlens
+
+  install:
+    desc: Install covlens to $GOPATH/bin
+    cmds:
+      - go install ./cmd/covlens
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  test:unit:
+    desc: Run unit tests (excluding e2e)
+    cmds:
+      - go test $(go list ./... | grep -v /e2e)
+
+  test:e2e:
+    desc: Run end-to-end tests
+    cmds:
+      - go test ./internal/covlens/e2e/...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  fmt:
+    desc: Format all Go source files
+    cmds:
+      - gofmt -w .
+
+  tidy:
+    desc: Tidy go.mod and go.sum
+    cmds:
+      - go mod tidy
+
+  check:
+    desc: Run vet + unit tests (CI-friendly local gate)
+    deps: [vet, test:unit]

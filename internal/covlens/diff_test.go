@@ -16,7 +16,7 @@ func TestResolvePackages(t *testing.T) {
 		{path: "c.go", pkg: "ex.com/x/b", modRoot: "/repo"},
 		{path: "d.go", pkg: "ex.com/y", modRoot: "/repo/y"}, // separate module
 		{path: "e.go", excluded: true, pkg: "ex.com/excl", modRoot: "/repo"},
-		{path: "f.go", pkg: "", modRoot: "/repo"},   // no pkg → skip
+		{path: "f.go", pkg: "", modRoot: "/repo"},      // no pkg → skip
 		{path: "g.go", pkg: "ex.com/x/a", modRoot: ""}, // no modRoot → skip
 	}}
 

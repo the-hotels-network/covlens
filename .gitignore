@@ -3,7 +3,7 @@
 *.out
 
 # Built binary (go build ./cmd/covlens)
-/covlens
+/bin
 
 # Go toolchain
 vendor/

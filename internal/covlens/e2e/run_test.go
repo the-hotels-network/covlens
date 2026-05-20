@@ -395,7 +395,7 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	cfg.TestOutput = io.Discard
 	cfg.ExcludeFiles = []string{`_gen\.go$`}
 	cfg.DiffThreshold = 80 // would fail if 0.0% were evaluated
-	cfg.TotalThreshold = 0  // diff mode only tests changed packages; none are testable here
+	cfg.TotalThreshold = 0 // diff mode only tests changed packages; none are testable here
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -451,7 +451,7 @@ func TestRun_RatchetTotal_FailsOnRegression(t *testing.T) {
 	cfg.HTML.AutoOpen = false
 	cfg.Stderr = io.Discard
 	cfg.TestOutput = io.Discard
-	cfg.DiffThreshold = 0  // diff is uncovered (new Bar); not what we're testing
+	cfg.DiffThreshold = 0   // diff is uncovered (new Bar); not what we're testing
 	cfg.TotalThreshold = 40 // current 50% clears this — only ratchet should trip
 	cfg.RatchetTotal = true
 
