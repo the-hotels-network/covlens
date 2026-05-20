@@ -2,6 +2,41 @@
 
 Go coverage tool that runs tests only on packages you changed and validates thresholds — with a modern HTML report.
 
+## TL;DR
+
+```sh
+go install github.com/the-hotels-network/covlens/cmd/covlens@latest
+covlens          # run from any Go repo; checks diff + total coverage, opens HTML report
+```
+
+- **Diff coverage** — measures only the lines you changed, not the whole file
+- **Total coverage** — validates an overall floor for the whole project
+- **HTML report** — self-contained, dark mode, syntax-highlighted, jump-to-uncovered
+- **JSON sidecar** — machine-readable output for CI tooling (no HTML scraping needed)
+- Exits 1 when a threshold fails — CI-friendly out of the box
+
+---
+
+## Table of contents
+
+- [What it does](#what-it-does)
+- [Install](#install)
+- [Usage](#usage)
+  - [CLI flags](#cli-flags)
+- [Configuration](#configuration)
+- [Ignoring files and functions](#ignoring-files-and-functions)
+- [Output](#output)
+- [CI example (CircleCI)](#ci-example-circleci)
+  - [PR comments and other CI glue](#pr-comments-and-other-ci-glue)
+- [Multi-module repos](#multi-module-repos)
+- [Test selection](#test-selection)
+  - [Recommended layout for e2e tests](#recommended-layout-for-e2e-tests)
+  - [Race detection](#race-detection)
+- [How diff coverage is calculated](#how-diff-coverage-is-calculated)
+- [License](#license)
+
+---
+
 ## What it does
 
 1. Finds all `.go` files changed relative to your base branch (committed, staged, and untracked)
