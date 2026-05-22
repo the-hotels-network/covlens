@@ -1,0 +1,53 @@
+Full-mode coverage repo with a Go workspace (go.work) tying together two
+modules: the root module `example.com/app` and a nested module
+`example.com/app/toolbox/v2`. Both contain tested code.
+
+Pre-fix, `go list -m` under a workspace lists every workspace member on
+its own line, and buildModulePathMap stored that multi-line blob as a
+map key. The prefix match in resolveAbsPath then failed for every
+profile entry and Report.Files came out empty even though the coverage
+profile was populated. This fixture would surface that regression.
+
+-- base/go.work --
+go 1.21
+
+use (
+	.
+	toolbox
+)
+-- base/go.mod --
+module example.com/app
+
+go 1.21
+-- base/foo.go --
+package app
+
+func Foo() int { return 1 }
+-- base/foo_test.go --
+package app
+
+import "testing"
+
+func TestFoo(t *testing.T) {
+	if Foo() != 1 {
+		t.Fail()
+	}
+}
+-- base/toolbox/go.mod --
+module example.com/app/toolbox/v2
+
+go 1.21
+-- base/toolbox/bar.go --
+package toolbox
+
+func Bar() int { return 2 }
+-- base/toolbox/bar_test.go --
+package toolbox
+
+import "testing"
+
+func TestBar(t *testing.T) {
+	if Bar() != 2 {
+		t.Fail()
+	}
+}

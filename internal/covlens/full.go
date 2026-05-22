@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -145,11 +146,17 @@ func findAllModuleRoots(dir string) ([]string, error) {
 
 // buildModulePathMap runs `go list -m` in each module root and returns
 // a map from module import path to its root directory.
+//
+// GOWORK=off is set so that, under a Go workspace, `go list -m` reports
+// only the local module instead of every workspace member — otherwise the
+// multi-line output would be stored verbatim as a map key and no profile
+// prefix would ever match.
 func buildModulePathMap(ctx context.Context, roots []string) (map[string]string, error) {
 	m := make(map[string]string)
 	for _, root := range roots {
 		cmd := exec.CommandContext(ctx, "go", "list", "-m")
 		cmd.Dir = root
+		cmd.Env = append(os.Environ(), "GOWORK=off")
 		out, err := cmd.Output()
 		if err != nil {
 			continue

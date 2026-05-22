@@ -434,6 +434,69 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	}
 }
 
+// TestRun_FullMode_GoWorkspace guards the fix for the silent-empty-report
+// bug that triggered when the target repo used a Go workspace (go.work).
+//
+// Pre-fix, `go list -m` under a workspace prints every workspace member
+// on its own line. buildModulePathMap stored that multi-line blob as a
+// map key, so the prefix match in resolveAbsPath never matched any
+// profile entry — every file was dropped and the report came out with
+// Files=[] and TotalCoverage=0, despite a populated coverage profile.
+//
+// Post-fix, buildModulePathMap runs `go list -m` with GOWORK=off so each
+// module reports only its own path, and files from both modules show up
+// in the report with the right coverage.
+func TestRun_FullMode_GoWorkspace(t *testing.T) {
+	requireExecutables(t, "git", "go")
+
+	repo := setupTxtarRepo(t, "testdata/repos/full_workspace.txtar")
+
+	cfg := covlens.DefaultConfig()
+	cfg.WorkDir = repo
+	cfg.HTML.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
+	cfg.FullMode = true
+	cfg.TotalThreshold = 0
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	report, err := covlens.Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if report == nil {
+		t.Fatal("Run returned nil report")
+	}
+
+	byPath := make(map[string]covlens.FileCoverage)
+	for _, fc := range report.Files {
+		byPath[fc.Path] = fc
+	}
+
+	// Both modules must be represented. Pre-fix, both were dropped.
+	foo, ok := byPath["foo.go"]
+	if !ok {
+		t.Fatalf("foo.go (root module) missing from report.Files; got %v", keysOf(byPath))
+	}
+	if foo.Coverage < 99 {
+		t.Errorf("foo.go: Coverage = %.1f%%, want 100%%", foo.Coverage)
+	}
+
+	bar, ok := byPath[filepath.Join("toolbox", "bar.go")]
+	if !ok {
+		t.Fatalf("toolbox/bar.go (nested module) missing from report.Files; got %v", keysOf(byPath))
+	}
+	if bar.Coverage < 99 {
+		t.Errorf("toolbox/bar.go: Coverage = %.1f%%, want 100%%", bar.Coverage)
+	}
+
+	if report.TotalCoverage < 99 {
+		t.Errorf("TotalCoverage = %.1f%%, want 100%% (both modules fully tested)", report.TotalCoverage)
+	}
+}
+
 // TestRun_RatchetTotal_FailsOnRegression covers the --ratchet path
 // (baselineTotalCoverage): when total coverage drops vs the merge-base,
 // the gate must fail even if the current value clears the absolute
