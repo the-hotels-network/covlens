@@ -3,6 +3,7 @@
 # Sample script — copy into your repo. Not part of the covlens binary contract.
 # See ../../../docs/adr/0003-transport-neutral-outputs.md
 set -euo pipefail
+export LC_ALL=C  # printf "%.1f" is locale-sensitive (comma vs dot)
 
 # --- load & validate report ---
 json="${1:-.coverage/coverage_report.json}"
@@ -14,12 +15,19 @@ schema=$(jq -r .schema "$json")
 pr="${CIRCLE_PULL_REQUEST:-}"; pr="${pr##*/}"
 [ -n "$pr" ] || { echo "not a PR build — skipping comment"; exit 0; }
 
+# --- nothing-to-report: skip ---
+diff_status=$(jq -r '.diff.status // ""' "$json")
+case "$diff_status" in
+  no-go-changes|only-deletions|all-excluded)
+    echo "diff has nothing to measure (status=$diff_status) — skipping comment"; exit 0 ;;
+esac
+
 # --- resolve artifact URL ---
 artifact_url="https://app.circleci.com/private/output/job/${CIRCLE_WORKFLOW_JOB_ID}/artifacts/${CIRCLE_NODE_INDEX:-0}/coverage/coverage_report.html"
 
 # --- compose markdown body ---
 total_cov=$(printf "%.1f" "$(jq -r '.totalCoverage' "$json")")
-total_passed=$(jq -r '.totalCoverage >= .totalThreshold' "$json")
+total_passed=$(jq -r '.totalPassed' "$json")
 total_threshold=$(jq -r '.totalThreshold' "$json")
 has_diff=$(jq -r 'has("diff")' "$json")
 has_baseline=$(jq -r 'has("baselineTotalCoverage")' "$json")
