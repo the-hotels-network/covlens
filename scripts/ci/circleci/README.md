@@ -11,26 +11,41 @@ Posts a sticky PR comment summarising the covlens run (pass/fail, diff %, total 
 | var | source | purpose |
 |---|---|---|
 | `GH_TOKEN` (or `GITHUB_TOKEN`) | project context | `gh` auth; needs `repo` scope (PR write) |
-| `CIRCLE_TOKEN` | project context | CircleCI API; reads artifact URL |
 | `CIRCLE_PULL_REQUEST` | built-in | PR URL; unset on non-PR builds (script no-ops) |
 | `CIRCLE_PROJECT_USERNAME` | built-in | org/user |
 | `CIRCLE_PROJECT_REPONAME` | built-in | repo |
-| `CIRCLE_BUILD_NUM` | built-in | job number for artifact lookup |
+| `CIRCLE_WORKFLOW_JOB_ID` | built-in | used to build the artifact URL |
+| `CIRCLE_NODE_INDEX` | built-in | parallelism index; defaults to `0` |
 
 ### Required tools in the CI image
 
-`gh`, `jq`, `curl`. All present in `cimg/go` images. On Alpine-based images install them first.
+`jq` and `curl` are present in `cimg/go`. `gh` is **not** — install it via the [`circleci/github-cli`](https://circleci.com/developer/orbs/orb/circleci/github-cli) orb (or your package manager on other images).
 
 ### Usage
 
 ```yaml
-- run:
-    name: covlens PR comment
-    when: always           # comment on threshold failure too
-    command: .circleci/scripts/pr-comment.sh .coverage/coverage_report.json
+orbs:
+  github-cli: circleci/github-cli@2.3.0
+
+jobs:
+  coverage:
+    docker:
+      - image: cimg/go:1.22
+    steps:
+      - checkout
+      - github-cli/install
+      - run:
+          name: Run covlens
+          command: covlens -r -v -no-open
+      - store_artifacts:
+          path: .coverage
+      - run:
+          name: covlens PR comment
+          when: always           # comment on threshold failure too
+          command: .circleci/scripts/pr-comment.sh .coverage/coverage_report.json
 ```
 
-Place this step **after** `covlens` and `store_artifacts`, **before** any threshold-enforcement step that exits 1 — `when: always` covers it either way, but ordering keeps logs readable.
+Place the comment step **after** `covlens` and `store_artifacts`, **before** any threshold-enforcement step that exits 1 — `when: always` covers it either way, but ordering keeps logs readable.
 
 ### Schema pinning
 
