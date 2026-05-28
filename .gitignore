@@ -21,4 +21,5 @@ Thumbs.db
 # Claude
 .claude
 .agents/
+.omc
 skills-lock.json
