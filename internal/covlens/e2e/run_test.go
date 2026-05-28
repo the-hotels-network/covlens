@@ -439,6 +439,61 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	}
 }
 
+// TestRun_DiffMode_SkipsTotalWhenUnneeded verifies that when neither
+// TotalThreshold nor RatchetTotal is set, diff mode skips the project-wide
+// `go test ./...` run entirely — the local "did I cover what I touched"
+// quick-check path. The fixture has fully tested code at HEAD; if RunTotal
+// ran, TotalCoverage would be ~100%. Asserting it stays at zero proves the
+// gate is honored.
+func TestRun_DiffMode_SkipsTotalWhenUnneeded(t *testing.T) {
+	requireExecutables(t, "git", "go")
+
+	dir := t.TempDir()
+	env := isolatedGitEnv()
+	runGit := gitRunner(t, dir, env)
+	write := fileWriter(t, dir)
+
+	runGit("init", "-b", "main")
+	write("go.mod", "module example.com/skip\n\ngo 1.21\n")
+	write("foo.go", "package foo\n\nfunc Foo() int { return 1 }\n")
+	write("foo_test.go", "package foo\n\nimport \"testing\"\n\nfunc TestFoo(t *testing.T) {\n\tif Foo() != 1 { t.Fail() }\n}\n")
+	runGit("add", ".")
+	runGit("commit", "-m", "base")
+
+	runGit("checkout", "-b", "feature")
+	write("bar.go", "package foo\n\nfunc Bar() int { return 2 }\n")
+	write("bar_test.go", "package foo\n\nimport \"testing\"\n\nfunc TestBar(t *testing.T) {\n\tif Bar() != 2 { t.Fail() }\n}\n")
+	runGit("add", ".")
+	runGit("commit", "-m", "add bar")
+
+	cfg := covlens.DefaultConfig()
+	cfg.WorkDir = dir
+	cfg.HTML.AutoOpen = false
+	cfg.Stderr = io.Discard
+	cfg.TestOutput = io.Discard
+	cfg.DiffThreshold = 80
+	cfg.TotalThreshold = 0
+	cfg.RatchetTotal = false
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	report, err := covlens.Run(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if report.TotalCoverage != 0 {
+		t.Errorf("TotalCoverage = %.1f%%, want 0 (RunTotal must be skipped when threshold=0 and ratchet=false)", report.TotalCoverage)
+	}
+	if !report.TotalPassed {
+		t.Errorf("TotalPassed = false, want true (vacuous pass when total not measured)")
+	}
+	if report.Diff == nil || !report.Diff.Passed {
+		t.Errorf("Diff side broken: Diff=%+v", report.Diff)
+	}
+}
+
 // TestRun_FullMode_GoWorkspace guards the fix for the silent-empty-report
 // bug that triggered when the target repo used a Go workspace (go.work).
 //

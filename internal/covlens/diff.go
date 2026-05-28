@@ -168,22 +168,29 @@ func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) 
 	testOut, closeLog := r.openTestOutputLog()
 	defer closeLog()
 
-	// Total coverage is project-wide: discover every module in the repo,
-	// not just the modules touched by this diff. The "touched modules"
-	// scope collapses to zero when every changed file is excluded, which
-	// makes TotalCoverage falsely 0% and trips the threshold gate.
-	allRoots, err := findAllModuleRoots(r.cfg.WorkDir)
-	if err != nil {
-		return profiles, fmt.Errorf("discovering module roots: %w", err)
-	}
-	profiles.allModuleRoots = allRoots
+	// Total coverage is only needed when one of its consumers is enabled:
+	// the absolute TotalThreshold gate, or the RatchetTotal comparison.
+	// Skipping it when neither applies turns diff mode into a fast local
+	// "did I cover what I touched?" check that doesn't pay for a full
+	// project test run.
+	if r.cfg.RatchetTotal || r.cfg.TotalThreshold > 0 {
+		// Total coverage is project-wide: discover every module in the repo,
+		// not just the modules touched by this diff. The "touched modules"
+		// scope collapses to zero when every changed file is excluded, which
+		// makes TotalCoverage falsely 0% and trips the threshold gate.
+		allRoots, err := findAllModuleRoots(r.cfg.WorkDir)
+		if err != nil {
+			return profiles, fmt.Errorf("discovering module roots: %w", err)
+		}
+		profiles.allModuleRoots = allRoots
 
-	logProgress(r.cfg.stderr(), "Running total coverage...")
-	totalRes, err := coverage.RunTotal(r.ctx, allRoots, r.outputDir, testOut)
-	if err != nil {
-		return profiles, fmt.Errorf("running total coverage: %w", err)
+		logProgress(r.cfg.stderr(), "Running total coverage...")
+		totalRes, err := coverage.RunTotal(r.ctx, allRoots, r.outputDir, testOut)
+		if err != nil {
+			return profiles, fmt.Errorf("running total coverage: %w", err)
+		}
+		profiles.totalProfilePath = totalRes.ProfilePath
 	}
-	profiles.totalProfilePath = totalRes.ProfilePath
 
 	logProgress(r.cfg.stderr(), "Running diff coverage...")
 	diffRes, err := coverage.RunDiff(r.ctx, targets.grouped, r.outputDir, testOut)
@@ -203,15 +210,20 @@ func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) 
 func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, profiles coverageProfiles) (coverageStats, error) {
 	var stats coverageStats
 
-	totalProfiles, err := cover.ParseProfiles(profiles.totalProfilePath)
-	if err != nil {
-		return stats, fmt.Errorf("parsing total coverage profile: %w", err)
+	// When total wasn't run (no TotalThreshold and no ratchet), skip the
+	// total parse/aggregate stage entirely. stats.totalCov stays at zero
+	// and buildReport's threshold check passes vacuously (0 >= 0).
+	if profiles.totalProfilePath != "" {
+		totalProfiles, err := cover.ParseProfiles(profiles.totalProfilePath)
+		if err != nil {
+			return stats, fmt.Errorf("parsing total coverage profile: %w", err)
+		}
+		modPathMap, err := buildModulePathMap(r.ctx, profiles.allModuleRoots)
+		if err != nil {
+			return stats, fmt.Errorf("building module path map: %w", err)
+		}
+		stats.totalCov = aggregateFiltered(totalProfiles, r.regexExcluder(modPathMap, r.cfg.WorkDir))
 	}
-	modPathMap, err := buildModulePathMap(r.ctx, profiles.allModuleRoots)
-	if err != nil {
-		return stats, fmt.Errorf("building module path map: %w", err)
-	}
-	stats.totalCov = aggregateFiltered(totalProfiles, r.regexExcluder(modPathMap, r.cfg.WorkDir))
 
 	if r.cfg.RatchetTotal {
 		logProgress(r.cfg.stderr(), "Computing baseline total coverage at merge-base...")
