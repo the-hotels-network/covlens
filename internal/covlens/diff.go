@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/tools/cover"
 
@@ -97,6 +98,12 @@ func (r *runner) classifyFiles(scope coverageScope) coverageSubjects {
 	pkgCache := make(map[string]packages.ModulePackage)
 	var subjects coverageSubjects
 	for _, f := range scope.changedFiles {
+		// Skip files Go itself doesn't compile or test: non-.go files, and
+		// anything under testdata/ or with a leading `.`/`_` path segment.
+		// These never produce coverage data; including them just adds noise.
+		if !strings.HasSuffix(f, ".go") || goAutoIgnored(f) {
+			continue
+		}
 		fs := fileState{path: f}
 		absPath := filepath.Join(scope.repoRoot, f)
 

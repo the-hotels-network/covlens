@@ -76,6 +76,30 @@ func TestClassifyExclusion(t *testing.T) {
 	}
 }
 
+func TestGoAutoIgnored(t *testing.T) {
+	cases := []struct {
+		relPath string
+		want    bool
+	}{
+		{"pkg/foo.go", false},
+		{"pkg/foo_test.go", false},
+		{"testdata/x.go", true},
+		{"pkg/testdata/x.go", true},
+		{"pkg/_internal/x.go", true},
+		{"pkg/.hidden/x.go", true},
+		{"pkg/_helper.go", true},
+		{"pkg/.hidden.go", true},
+		{"_test.go", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.relPath, func(t *testing.T) {
+			if got := goAutoIgnored(tc.relPath); got != tc.want {
+				t.Errorf("goAutoIgnored(%q) = %v, want %v", tc.relPath, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRegexExcluder(t *testing.T) {
 	r := &runner{
 		excludeRes: []*regexp.Regexp{regexp.MustCompile(`mocks_.*\.go$`)},

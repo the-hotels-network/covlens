@@ -3,9 +3,26 @@ package covlens
 import (
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/the-hotels-network/covlens/internal/directive"
 )
+
+// goAutoIgnored reports whether relPath is a file Go's own toolchain ignores
+// when building or testing: anything under a `testdata` directory, or with a
+// path segment starting with `.` or `_`. These never produce coverage data,
+// so surfacing them in the diff report just adds noise. See `go help packages`.
+func goAutoIgnored(relPath string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(relPath), "/") {
+		if seg == "testdata" {
+			return true
+		}
+		if len(seg) > 0 && (seg[0] == '.' || seg[0] == '_') {
+			return true
+		}
+	}
+	return false
+}
 
 // exclusion captures the per-file decision shared by diff and full modes.
 type exclusion struct {
