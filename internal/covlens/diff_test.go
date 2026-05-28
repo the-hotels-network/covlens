@@ -116,7 +116,10 @@ func TestBuildReport_RatchetPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &runner{cfg: Config{RatchetTotal: tc.ratchet, TotalThreshold: tc.totalThreshold}}
 			stats := coverageStats{totalCov: tc.totalCov, baselineCov: tc.baselineCov}
-			rep := r.buildReport(coverageScope{}, coverageSubjects{}, coverageProfiles{}, stats)
+			// Non-empty totalProfilePath signals that RunTotal ran, so the
+			// threshold/ratchet gates apply (they vacuously pass otherwise).
+			profiles := coverageProfiles{totalProfilePath: "/tmp/measured.out"}
+			rep := r.buildReport(coverageScope{}, coverageSubjects{}, profiles, stats)
 			if rep.TotalPassed != tc.want {
 				t.Errorf("TotalPassed = %v, want %v (totalCov=%v baseline=%v threshold=%v ratchet=%v)",
 					rep.TotalPassed, tc.want, tc.totalCov, tc.baselineCov, tc.totalThreshold, tc.ratchet)

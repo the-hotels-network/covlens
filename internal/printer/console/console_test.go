@@ -40,7 +40,7 @@ func assertNotContains(t *testing.T, got string, banned ...string) {
 }
 
 func TestPrintSummary_DiffMode_AllPass(t *testing.T) {
-	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, RatchetTotal: true}
 	report := &covlens.Report{
 		Diff: &covlens.DiffSection{
 			Status:    covlens.DiffStatusMeasured,
@@ -69,7 +69,7 @@ func TestPrintSummary_DiffMode_AllPass(t *testing.T) {
 }
 
 func TestPrintSummary_DiffMode_DiffFailed(t *testing.T) {
-	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, RatchetTotal: true}
 	report := &covlens.Report{
 		Diff: &covlens.DiffSection{
 			Status: covlens.DiffStatusMeasured, Coverage: 50.0, Threshold: 80, Passed: false,
@@ -87,7 +87,7 @@ func TestPrintSummary_DiffMode_DiffFailed(t *testing.T) {
 }
 
 func TestPrintSummary_DiffMode_TotalFailed(t *testing.T) {
-	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70}
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, RatchetTotal: true}
 	report := &covlens.Report{
 		Diff: &covlens.DiffSection{
 			Status: covlens.DiffStatusMeasured, Coverage: 92.0, Threshold: 80, Passed: true,
@@ -102,6 +102,24 @@ func TestPrintSummary_DiffMode_TotalFailed(t *testing.T) {
 		"Diff threshold passed",
 		"Total threshold not met",
 	)
+}
+
+func TestPrintSummary_DiffMode_NoRatchet_HidesTotal(t *testing.T) {
+	// Plain diff mode (no --ratchet): RunTotal is skipped upstream, so the
+	// summary must not show a Total badge with a stale 0% number.
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70} // ratchet off
+	report := &covlens.Report{
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 92.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 0, TotalPassed: true, // vacuous values when total isn't measured
+	}
+
+	var buf bytes.Buffer
+	console.PrintSummary(&buf, report, cfg)
+
+	assertContainsAll(t, buf.String(), "Diff threshold passed")
+	assertNotContains(t, buf.String(), "Total coverage:", "Total threshold")
 }
 
 func TestPrintSummary_FullMode_SkipsDiffSection(t *testing.T) {
@@ -185,6 +203,48 @@ func TestPrintSummary_Ratchet_BaselineZero(t *testing.T) {
 		"Total threshold passed",
 	)
 	assertNotContains(t, buf.String(), "baseline:", "did not drop")
+}
+
+func TestPrintSummary_AllFilesFiltered_ShowsHint(t *testing.T) {
+	// Diff has entries but all are excluded and ShowExcluded is off —
+	// previously rendered a bare "Files:" header followed by silence.
+	cfg := covlens.Config{DiffThreshold: 80, ShowExcluded: false}
+	report := &covlens.Report{
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusAllExcluded, Coverage: 0, Threshold: 80, Passed: true,
+		},
+		Files: []covlens.FileCoverage{
+			{Path: "mocks_foo.go", Excluded: true, Coverage: -1},
+		},
+	}
+
+	var buf bytes.Buffer
+	console.PrintSummary(&buf, report, cfg)
+
+	assertContainsAll(t, buf.String(),
+		"Files:",
+		"no measurable changed files",
+	)
+}
+
+func TestPrintSummary_Ratchet_WithThreshold_ShowsBoth(t *testing.T) {
+	// When --ratchet is combined with TotalThreshold > 0, the total line
+	// surfaces both: ratchet is the primary gate but the absolute floor
+	// matters to the user too.
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 35, RatchetTotal: true}
+	report := &covlens.Report{
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 95.0, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 78.5, BaselineTotalCoverage: 78.0, TotalPassed: true,
+	}
+
+	var buf bytes.Buffer
+	console.PrintSummary(&buf, report, cfg)
+
+	assertContainsAll(t, buf.String(),
+		"threshold: 35%", "baseline: 78.00%", "Δ +0.50pp",
+	)
 }
 
 func TestPrintSummary_NoFiles_SkipsFilesSection(t *testing.T) {

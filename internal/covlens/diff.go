@@ -168,12 +168,11 @@ func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) 
 	testOut, closeLog := r.openTestOutputLog()
 	defer closeLog()
 
-	// Total coverage is only needed when one of its consumers is enabled:
-	// the absolute TotalThreshold gate, or the RatchetTotal comparison.
-	// Skipping it when neither applies turns diff mode into a fast local
-	// "did I cover what I touched?" check that doesn't pay for a full
-	// project test run.
-	if r.cfg.RatchetTotal || r.cfg.TotalThreshold > 0 {
+	// Total coverage is only computed under --ratchet (-r). Plain diff mode
+	// is the fast local "did I cover what I touched?" check and skips the
+	// project-wide `go test ./...` run entirely. TotalThreshold remains a
+	// result-gate but only applies when RunTotal actually ran (ratchet on).
+	if r.cfg.RatchetTotal {
 		// Total coverage is project-wide: discover every module in the repo,
 		// not just the modules touched by this diff. The "touched modules"
 		// scope collapses to zero when every changed file is excluded, which
@@ -320,12 +319,17 @@ func (r *runner) buildReport(scope coverageScope, subjects coverageSubjects, pro
 		diffStatus = DiffStatusAllExcluded
 	}
 
-	totalPassed := stats.totalCov >= r.cfg.TotalThreshold
-	if r.cfg.RatchetTotal && stats.baselineCov > 0 {
-		// Pass if total coverage hasn't dropped by more than 0.1pp.
-		totalPassed = stats.totalCov >= stats.baselineCov-0.1
+	// Total gates only apply when RunTotal actually ran (ratchet on).
+	// In plain diff mode total isn't measured, so the gate vacuously passes.
+	totalPassed := true
+	if profiles.totalProfilePath != "" {
+		totalPassed = stats.totalCov >= r.cfg.TotalThreshold
+		if r.cfg.RatchetTotal && stats.baselineCov > 0 {
+			// Pass if total coverage hasn't dropped by more than 0.1pp.
+			totalPassed = stats.totalCov >= stats.baselineCov-0.1
+		}
+		// If RatchetTotal is set but baseline could not be computed, fall through to threshold check.
 	}
-	// If RatchetTotal is set but baseline could not be computed, fall through to threshold check.
 
 	profileMap := make(map[string]*cover.Profile, len(profiles.diffProfiles))
 	for _, p := range profiles.diffProfiles {

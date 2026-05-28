@@ -31,7 +31,6 @@ func TestRun_DiffCoverage(t *testing.T) {
 	cfg.Stderr = io.Discard     // silence ▶ progress lines in test output
 	cfg.TestOutput = io.Discard // silence go test subprocess chatter
 	cfg.DiffThreshold = 40      // permissive — we expect ~50%
-	cfg.TotalThreshold = 40
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -71,18 +70,12 @@ func TestRun_DiffCoverage(t *testing.T) {
 	if report.Diff.Coverage < 30 || report.Diff.Coverage > 70 {
 		t.Errorf("Diff.Coverage = %.1f%%, want ~50%%", report.Diff.Coverage)
 	}
-	if report.TotalCoverage <= 0 {
-		t.Errorf("TotalCoverage = %.1f%%, expected > 0", report.TotalCoverage)
-	}
-
 	if !report.Diff.Passed {
 		t.Errorf("Diff.Passed = false (threshold %.0f, coverage %.1f)",
 			cfg.DiffThreshold, report.Diff.Coverage)
 	}
-	if !report.TotalPassed {
-		t.Errorf("TotalPassed = false (threshold %.0f, coverage %.1f)",
-			cfg.TotalThreshold, report.TotalCoverage)
-	}
+	// Total is not measured in plain diff mode (no --ratchet). See
+	// TestRun_RatchetTotal_* for the project-wide total path.
 
 	if report.OutputDir == "" {
 		t.Error("OutputDir empty — expected the resolved output directory to be set")
@@ -395,7 +388,7 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	cfg.TestOutput = io.Discard
 	cfg.ExcludeFiles = []string{`_gen\.go$`}
 	cfg.DiffThreshold = 80 // would fail if 0.0% were evaluated
-	cfg.TotalThreshold = 50 // project-wide total: foo.go is fully tested at HEAD
+	cfg.TotalThreshold = 0 // total is not measured in plain diff mode (no --ratchet)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -417,11 +410,6 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	if !report.TotalPassed {
 		t.Errorf("TotalPassed = false (TotalCoverage=%.1f%%)", report.TotalCoverage)
 	}
-	// Project-wide total: even though every changed file is excluded,
-	// RunTotal scans the whole repo and finds foo.go fully covered.
-	if report.TotalCoverage < 99 {
-		t.Errorf("TotalCoverage = %.1f%%, want ~100%% (project-wide total ignores diff exclusions)", report.TotalCoverage)
-	}
 
 	// The excluded file must appear in the report as excluded, not measurable.
 	var gen *covlens.FileCoverage
@@ -439,13 +427,13 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	}
 }
 
-// TestRun_DiffMode_SkipsTotalWhenUnneeded verifies that when neither
-// TotalThreshold nor RatchetTotal is set, diff mode skips the project-wide
-// `go test ./...` run entirely — the local "did I cover what I touched"
-// quick-check path. The fixture has fully tested code at HEAD; if RunTotal
-// ran, TotalCoverage would be ~100%. Asserting it stays at zero proves the
-// gate is honored.
-func TestRun_DiffMode_SkipsTotalWhenUnneeded(t *testing.T) {
+// TestRun_DiffMode_SkipsTotalWithoutRatchet verifies that plain diff mode
+// (no --ratchet) skips the project-wide `go test ./...` run — even when
+// TotalThreshold is set in config. This is the fast local "did I cover
+// what I touched" path; total is only computed under --ratchet. The
+// fixture has fully tested code at HEAD; if RunTotal ran, TotalCoverage
+// would be ~100%. Asserting it stays at zero proves the gate is honored.
+func TestRun_DiffMode_SkipsTotalWithoutRatchet(t *testing.T) {
 	requireExecutables(t, "git", "go")
 
 	dir := t.TempDir()
@@ -472,7 +460,7 @@ func TestRun_DiffMode_SkipsTotalWhenUnneeded(t *testing.T) {
 	cfg.Stderr = io.Discard
 	cfg.TestOutput = io.Discard
 	cfg.DiffThreshold = 80
-	cfg.TotalThreshold = 0
+	cfg.TotalThreshold = 70 // would fail (0 >= 70 is false) if RunTotal ran but produced no data
 	cfg.RatchetTotal = false
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -484,10 +472,10 @@ func TestRun_DiffMode_SkipsTotalWhenUnneeded(t *testing.T) {
 	}
 
 	if report.TotalCoverage != 0 {
-		t.Errorf("TotalCoverage = %.1f%%, want 0 (RunTotal must be skipped when threshold=0 and ratchet=false)", report.TotalCoverage)
+		t.Errorf("TotalCoverage = %.1f%%, want 0 (RunTotal must be skipped without --ratchet)", report.TotalCoverage)
 	}
 	if !report.TotalPassed {
-		t.Errorf("TotalPassed = false, want true (vacuous pass when total not measured)")
+		t.Errorf("TotalPassed = false, want true (vacuous pass when total not measured, even with TotalThreshold > 0)")
 	}
 	if report.Diff == nil || !report.Diff.Passed {
 		t.Errorf("Diff side broken: Diff=%+v", report.Diff)

@@ -39,56 +39,79 @@ func PrintSummary(out io.Writer, r *covlens.Report, cfg covlens.Config) {
 		}
 	}
 
-	// Total coverage.
-	if cfg.RatchetTotal && r.BaselineTotalCoverage > 0 {
-		delta := r.TotalCoverage - r.BaselineTotalCoverage
-		// Color the delta to give an at-a-glance signal: green when
-		// coverage rose, red when it fell, neutral within the ±0.01pp band
-		// that's effectively a wash.
-		deltaColor := cReset
-		if delta > 0.01 {
-			deltaColor = cGreen
-		} else if delta < -0.01 {
-			deltaColor = cRed
-		}
-		fmt.Fprintf(out, "  %-30s %.2f%% (baseline: %.2f%%, %sΔ %+.2fpp%s)\n",
-			"Total coverage:", r.TotalCoverage, r.BaselineTotalCoverage,
-			deltaColor, delta, cReset)
-		if r.TotalPassed {
-			fmt.Fprintf(out, "  %s✔%s  Total coverage did not drop\n", cGreen, cReset)
+	// Total coverage. Rendered only when actually measured: full mode
+	// (no Diff section) always measures total; diff mode measures it
+	// only under --ratchet.
+	totalMeasured := r.Diff == nil || cfg.RatchetTotal
+	if totalMeasured {
+		if cfg.RatchetTotal && r.BaselineTotalCoverage > 0 {
+			delta := r.TotalCoverage - r.BaselineTotalCoverage
+			// Color the delta to give an at-a-glance signal: green when
+			// coverage rose, red when it fell, neutral within the ±0.01pp band
+			// that's effectively a wash.
+			deltaColor := cReset
+			if delta > 0.01 {
+				deltaColor = cGreen
+			} else if delta < -0.01 {
+				deltaColor = cRed
+			}
+			if cfg.TotalThreshold > 0 {
+				fmt.Fprintf(out, "  %-30s %.2f%% (threshold: %.0f%%, baseline: %.2f%%, %sΔ %+.2fpp%s)\n",
+					"Total coverage:", r.TotalCoverage, cfg.TotalThreshold, r.BaselineTotalCoverage,
+					deltaColor, delta, cReset)
+			} else {
+				fmt.Fprintf(out, "  %-30s %.2f%% (baseline: %.2f%%, %sΔ %+.2fpp%s)\n",
+					"Total coverage:", r.TotalCoverage, r.BaselineTotalCoverage,
+					deltaColor, delta, cReset)
+			}
+			if r.TotalPassed {
+				fmt.Fprintf(out, "  %s✔%s  Total coverage did not drop\n", cGreen, cReset)
+			} else {
+				fmt.Fprintf(out, "  %s✘%s  Total coverage dropped vs base branch\n", cRed, cReset)
+			}
 		} else {
-			fmt.Fprintf(out, "  %s✘%s  Total coverage dropped vs base branch\n", cRed, cReset)
-		}
-	} else {
-		fmt.Fprintf(out, "  %-30s %.2f%% (threshold: %.0f%%)\n", "Total coverage:", r.TotalCoverage, cfg.TotalThreshold)
-		if r.TotalPassed {
-			fmt.Fprintf(out, "  %s✔%s  Total threshold passed\n", cGreen, cReset)
-		} else {
-			fmt.Fprintf(out, "  %s✘%s  Total threshold not met\n", cRed, cReset)
+			fmt.Fprintf(out, "  %-30s %.2f%% (threshold: %.0f%%)\n", "Total coverage:", r.TotalCoverage, cfg.TotalThreshold)
+			if r.TotalPassed {
+				fmt.Fprintf(out, "  %s✔%s  Total threshold passed\n", cGreen, cReset)
+			} else {
+				fmt.Fprintf(out, "  %s✘%s  Total threshold not met\n", cRed, cReset)
+			}
 		}
 	}
 	fmt.Fprintln(out)
 
-	// Per-file breakdown.
+	// Per-file breakdown. When entries exist but all of them get filtered
+	// (e.g. all changed files excluded with ShowExcluded=false), surface a
+	// hint instead of a bare "Files:" header followed by silence.
 	if len(r.Files) > 0 {
-		fmt.Fprintf(out, "  %sFiles:%s\n", cBold, cReset)
-		threshold := cfg.DiffThreshold
-		if cfg.FullMode {
-			threshold = cfg.TotalThreshold
-		}
+		visible := 0
 		for _, f := range r.Files {
-			if f.Excluded && !cfg.ShowExcluded {
-				continue
+			if !f.Excluded || cfg.ShowExcluded {
+				visible++
 			}
-			switch f.StatusFor(threshold) {
-			case "ok":
-				fmt.Fprintf(out, "    %s✔%s %-50s %s%.1f%%%s\n", cGreen, cReset, f.Path, cGreen, f.Coverage, cReset)
-			case "fail":
-				fmt.Fprintf(out, "    %s✘%s %-50s %s%.1f%%%s\n", cRed, cReset, f.Path, cRed, f.Coverage, cReset)
-			case "excluded":
-				fmt.Fprintf(out, "    %s–%s %-50s %s(excluded)%s\n", cYellow, cReset, f.Path, cYellow, cReset)
-			default:
-				fmt.Fprintf(out, "    %s⚠%s %-50s %s(no data)%s\n", cYellow, cReset, f.Path, cYellow, cReset)
+		}
+		fmt.Fprintf(out, "  %sFiles:%s\n", cBold, cReset)
+		if visible == 0 {
+			fmt.Fprintf(out, "    %s(no measurable changed files)%s\n", cYellow, cReset)
+		} else {
+			threshold := cfg.DiffThreshold
+			if cfg.FullMode {
+				threshold = cfg.TotalThreshold
+			}
+			for _, f := range r.Files {
+				if f.Excluded && !cfg.ShowExcluded {
+					continue
+				}
+				switch f.StatusFor(threshold) {
+				case "ok":
+					fmt.Fprintf(out, "    %s✔%s %-50s %s%.1f%%%s\n", cGreen, cReset, f.Path, cGreen, f.Coverage, cReset)
+				case "fail":
+					fmt.Fprintf(out, "    %s✘%s %-50s %s%.1f%%%s\n", cRed, cReset, f.Path, cRed, f.Coverage, cReset)
+				case "excluded":
+					fmt.Fprintf(out, "    %s–%s %-50s %s(excluded)%s\n", cYellow, cReset, f.Path, cYellow, cReset)
+				default:
+					fmt.Fprintf(out, "    %s⚠%s %-50s %s(no data)%s\n", cYellow, cReset, f.Path, cYellow, cReset)
+				}
 			}
 		}
 		fmt.Fprintln(out)

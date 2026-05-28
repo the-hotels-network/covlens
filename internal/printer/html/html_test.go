@@ -78,6 +78,24 @@ func TestGenerate_HappyPath_DiffMode(t *testing.T) {
 	}
 }
 
+func TestGenerate_DiffMode_NoRatchet_HidesTotalBadge(t *testing.T) {
+	// Plain diff mode (no --ratchet): the total badge must be hidden since
+	// RunTotal was skipped upstream. Rendering "0.0%" would be misleading.
+	r := &covlens.Report{
+		Diff: &covlens.DiffSection{
+			Status: covlens.DiffStatusMeasured, Coverage: 85.5, Threshold: 80, Passed: true,
+		},
+		TotalCoverage: 0, TotalPassed: true,
+	}
+	cfg := covlens.Config{DiffThreshold: 80, TotalThreshold: 70, BaseBranch: "main"} // ratchet off
+
+	got := readGenerated(t, r, cfg)
+
+	if strings.Contains(got, "Total project coverage") {
+		t.Error("expected total badge to be hidden in plain diff mode (no --ratchet)")
+	}
+}
+
 func TestGenerate_FullMode_OmitsBaseBranch(t *testing.T) {
 	r := &covlens.Report{
 		// Diff is nil in full mode.

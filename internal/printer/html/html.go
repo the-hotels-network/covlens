@@ -57,6 +57,7 @@ type templateData struct {
 	FileCount           int
 	SourceFiles         []sourceFile
 	CSS                 template.CSS
+	TotalMeasured       bool
 	TotalAboveThreshold bool
 	HasDelta            bool
 	CoverageDelta       float64
@@ -166,12 +167,19 @@ func Generate(r *covlens.Report, cfg covlens.Config, outputPath string) error {
 		initialTheme = input.Theme
 	}
 
+	// Total is only measured when RunTotal actually ran: full mode always
+	// measures it; diff mode only under --ratchet. Otherwise the total
+	// badge is hidden — the number isn't meaningful and showing 0% would
+	// be misleading.
+	totalMeasured := cfg.FullMode || cfg.RatchetTotal
+
 	data := templateData{
 		reportInput:         input,
 		GeneratedAt:         time.Now().Format("2006-01-02 15:04"),
 		FileCount:           fileCount,
 		SourceFiles:         sourceFiles,
 		CSS:                 template.CSS(cssBytes),
+		TotalMeasured:       totalMeasured,
 		TotalAboveThreshold: input.TotalCoverage >= input.TotalThreshold,
 		HasDelta:            hasDelta,
 		CoverageDelta:       delta,
