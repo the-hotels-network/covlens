@@ -28,18 +28,23 @@ type coverageSubjects struct {
 }
 
 // coverageTargets is the set of `go test` invocations needed to produce
-// profiles for the subjects: packages grouped by their owning module root.
+// the diff profile: touched packages grouped by their owning module root.
+// The total profile uses project-wide module discovery instead (see
+// coverageProfiles.allModuleRoots).
 type coverageTargets struct {
-	grouped     map[string][]string
-	moduleRoots []string
+	grouped map[string][]string
 }
 
 // coverageProfiles is the raw output of `go test -coverprofile`: paths to the
 // merged total / diff profiles, plus the parsed diff blocks for downstream use.
+//
+// allModuleRoots is the project-wide module set discovered during the run
+// and carried downstream so computeStats can build a complete path map.
 type coverageProfiles struct {
 	totalProfilePath string
 	diffProfilePath  string
 	diffProfiles     []*cover.Profile
+	allModuleRoots   []string
 }
 
 // coverageStats holds the computed numbers and per-file results derived from
@@ -154,12 +159,7 @@ func (r *runner) resolvePackages(subjects coverageSubjects) coverageTargets {
 		})
 	}
 	grouped := packages.GroupByModule(modPkgs)
-
-	moduleRoots := make([]string, 0, len(grouped))
-	for root := range grouped {
-		moduleRoots = append(moduleRoots, root)
-	}
-	return coverageTargets{grouped: grouped, moduleRoots: moduleRoots}
+	return coverageTargets{grouped: grouped}
 }
 
 func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) {
@@ -168,8 +168,18 @@ func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) 
 	testOut, closeLog := r.openTestOutputLog()
 	defer closeLog()
 
+	// Total coverage is project-wide: discover every module in the repo,
+	// not just the modules touched by this diff. The "touched modules"
+	// scope collapses to zero when every changed file is excluded, which
+	// makes TotalCoverage falsely 0% and trips the threshold gate.
+	allRoots, err := findAllModuleRoots(r.cfg.WorkDir)
+	if err != nil {
+		return profiles, fmt.Errorf("discovering module roots: %w", err)
+	}
+	profiles.allModuleRoots = allRoots
+
 	logProgress(r.cfg.stderr(), "Running total coverage...")
-	totalRes, err := coverage.RunTotal(r.ctx, targets.moduleRoots, r.outputDir, testOut)
+	totalRes, err := coverage.RunTotal(r.ctx, allRoots, r.outputDir, testOut)
 	if err != nil {
 		return profiles, fmt.Errorf("running total coverage: %w", err)
 	}
@@ -190,14 +200,14 @@ func (r *runner) runCoverage(targets coverageTargets) (coverageProfiles, error) 
 	return profiles, nil
 }
 
-func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, targets coverageTargets, profiles coverageProfiles) (coverageStats, error) {
+func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, profiles coverageProfiles) (coverageStats, error) {
 	var stats coverageStats
 
 	totalProfiles, err := cover.ParseProfiles(profiles.totalProfilePath)
 	if err != nil {
 		return stats, fmt.Errorf("parsing total coverage profile: %w", err)
 	}
-	modPathMap, err := buildModulePathMap(r.ctx, targets.moduleRoots)
+	modPathMap, err := buildModulePathMap(r.ctx, profiles.allModuleRoots)
 	if err != nil {
 		return stats, fmt.Errorf("building module path map: %w", err)
 	}
@@ -205,7 +215,7 @@ func (r *runner) computeStats(scope coverageScope, subjects coverageSubjects, ta
 
 	if r.cfg.RatchetTotal {
 		logProgress(r.cfg.stderr(), "Computing baseline total coverage at merge-base...")
-		bc, err := r.baselineTotalCoverage(scope, targets)
+		bc, err := r.baselineTotalCoverage(scope)
 		if err != nil {
 			return stats, fmt.Errorf("computing baseline coverage (required by --ratchet): %w", err)
 		}

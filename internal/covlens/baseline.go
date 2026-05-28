@@ -3,7 +3,6 @@ package covlens
 import (
 	"io"
 	"os"
-	"path/filepath"
 
 	"golang.org/x/tools/cover"
 
@@ -11,8 +10,12 @@ import (
 )
 
 // baselineTotalCoverage checks out scope.mergeBase into a temporary worktree,
-// runs total coverage there, and returns the percentage.
-func (r *runner) baselineTotalCoverage(scope coverageScope, targets coverageTargets) (float64, error) {
+// runs project-wide total coverage there, and returns the percentage.
+//
+// Modules are re-discovered inside the worktree rather than reused from HEAD
+// so that modules added or removed between merge-base and HEAD don't skew the
+// comparison: the baseline reflects what the project actually looked like.
+func (r *runner) baselineTotalCoverage(scope coverageScope) (float64, error) {
 	tmpDir, err := os.MkdirTemp("", "covlens-baseline-*")
 	if err != nil {
 		return 0, err
@@ -24,14 +27,9 @@ func (r *runner) baselineTotalCoverage(scope coverageScope, targets coverageTarg
 	}
 	defer r.git.RemoveWorktree(tmpDir)
 
-	// Translate each module root to its equivalent path inside the worktree.
-	baseRoots := make([]string, len(targets.moduleRoots))
-	for i, root := range targets.moduleRoots {
-		rel, err := filepath.Rel(scope.repoRoot, root)
-		if err != nil {
-			return 0, err
-		}
-		baseRoots[i] = filepath.Join(tmpDir, rel)
+	baseRoots, err := findAllModuleRoots(tmpDir)
+	if err != nil {
+		return 0, err
 	}
 
 	baseOutputDir, err := os.MkdirTemp("", "covlens-baseline-out-*")

@@ -96,7 +96,7 @@ func (r *runner) run() (*Report, error) {
 		return nil, err
 	}
 
-	stats, err := r.computeStats(scope, subjects, targets, profiles)
+	stats, err := r.computeStats(scope, subjects, profiles)
 	if err != nil {
 		return nil, err
 	}

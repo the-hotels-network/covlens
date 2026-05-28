@@ -395,7 +395,7 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	cfg.TestOutput = io.Discard
 	cfg.ExcludeFiles = []string{`_gen\.go$`}
 	cfg.DiffThreshold = 80 // would fail if 0.0% were evaluated
-	cfg.TotalThreshold = 0 // diff mode only tests changed packages; none are testable here
+	cfg.TotalThreshold = 50 // project-wide total: foo.go is fully tested at HEAD
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -416,6 +416,11 @@ func TestRun_DiffMode_AllChangedFilesExcluded(t *testing.T) {
 	}
 	if !report.TotalPassed {
 		t.Errorf("TotalPassed = false (TotalCoverage=%.1f%%)", report.TotalCoverage)
+	}
+	// Project-wide total: even though every changed file is excluded,
+	// RunTotal scans the whole repo and finds foo.go fully covered.
+	if report.TotalCoverage < 99 {
+		t.Errorf("TotalCoverage = %.1f%%, want ~100%% (project-wide total ignores diff exclusions)", report.TotalCoverage)
 	}
 
 	// The excluded file must appear in the report as excluded, not measurable.

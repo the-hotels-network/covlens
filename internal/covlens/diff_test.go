@@ -41,9 +41,6 @@ func TestResolvePackages(t *testing.T) {
 	if yPkgs := targets.grouped["/repo/y"]; len(yPkgs) != 1 || yPkgs[0] != "ex.com/y" {
 		t.Errorf(`grouped["/repo/y"] = %v, want [ex.com/y]`, yPkgs)
 	}
-	if len(targets.moduleRoots) != 2 {
-		t.Errorf("moduleRoots: got %d, want 2: %v", len(targets.moduleRoots), targets.moduleRoots)
-	}
 }
 
 func TestBuildReport_ExcludedFile(t *testing.T) {
