@@ -1,6 +1,6 @@
 # CircleCI reference glue for covlens
 
-Sample scripts that wire a covlens run into CircleCI + GitHub. **Not part of the covlens binary's stability contract** — see [ADR 0003](../../../docs/adr/0003-transport-neutral-outputs.md). Copy what you need into your own repo; the JSON sidecar (`coverage_report.json`, schema `1`) is the stable interface.
+Sample scripts that wire a covlens run into CircleCI + GitHub. **Not part of the covlens binary's stability contract** — see [ADR 0003](../../../docs/adr/0003-transport-neutral-outputs.md). Copy what you need into your own project or fetch them directly from this repo at CI time (see usage below); the JSON sidecar (`coverage_report.json`, schema `1`) is the stable interface.
 
 ## `pr-comment.sh`
 
@@ -42,11 +42,9 @@ jobs:
       - run:
           name: covlens PR comment
           when: always           # comment on threshold failure too
-          command: .circleci/scripts/pr-comment.sh .coverage/coverage_report.json
+          command: |
+            curl -fsSL https://raw.githubusercontent.com/the-hotels-network/covlens/main/scripts/ci/circleci/pr-comment.sh \
+              | bash -s -- .coverage/coverage_report.json
 ```
 
 Place the comment step **after** `covlens` and `store_artifacts`, **before** any threshold-enforcement step that exits 1 — `when: always` covers it either way, but ordering keeps logs readable.
-
-### Schema pinning
-
-The script asserts `schema == "1"`. If covlens bumps the schema, update the script and pin a compatible covlens version (`go install …/covlens@vX.Y.Z`). See [`internal/printer/json`](../../../internal/printer/json) for the schema.

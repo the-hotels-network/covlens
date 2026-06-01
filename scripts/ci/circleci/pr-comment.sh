@@ -12,7 +12,7 @@ schema=$(jq -r .schema "$json")
 [ "$schema" = "1" ] || { echo "covlens JSON schema mismatch: got $schema, expected 1" >&2; exit 1; }
 
 # --- non-PR build: no-op ---
-pr="${CIRCLE_PULL_REQUEST:-}"; pr="${pr##*/}"
+pr=$(gh pr list --head "$CIRCLE_BRANCH" --json number --jq '.[0].number // empty')
 [ -n "$pr" ] || { echo "not a PR build — skipping comment"; exit 0; }
 
 # --- nothing-to-report: skip ---
