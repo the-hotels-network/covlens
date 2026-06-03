@@ -23,7 +23,7 @@ case "$diff_status" in
 esac
 
 # --- resolve artifact URL ---
-artifact_url="https://app.circleci.com/private/output/job/${CIRCLE_WORKFLOW_JOB_ID}/artifacts/${CIRCLE_NODE_INDEX:-0}/coverage/coverage_report.html"
+artifact_url="https://output.circle-artifacts.com/output/job/${CIRCLE_WORKFLOW_JOB_ID}/artifacts/${CIRCLE_NODE_INDEX:-0}/coverage/coverage_report.html"
 
 # --- compose markdown body ---
 total_cov=$(printf "%.1f" "$(jq -r '.totalCoverage' "$json")")
