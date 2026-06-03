@@ -209,6 +209,49 @@ func TestClassifyMissingTool(t *testing.T) {
 	}
 }
 
+func TestClassifyToolchainMismatch(t *testing.T) {
+	cases := []struct {
+		name       string
+		in         string
+		wantTool   string
+		wantDriver string
+	}{
+		{
+			name:       "compile mismatch — typical go test output",
+			in:         "# example.com/foo\ncompile: version \"go1.26.0\" does not match go tool version \"go1.25.10\"\nFAIL\n",
+			wantTool:   "go1.26.0",
+			wantDriver: "go1.25.10",
+		},
+		{
+			name:       "link tool mismatch is also caught",
+			in:         `link: version "go1.25.0" does not match go tool version "go1.24.7"`,
+			wantTool:   "go1.25.0",
+			wantDriver: "go1.24.7",
+		},
+		{
+			name:       "no marker → empty",
+			in:         "--- FAIL: TestFoo (0.01s)\n    foo_test.go:5: bad\nFAIL\n",
+			wantTool:   "",
+			wantDriver: "",
+		},
+		{
+			name:       "empty input → empty",
+			in:         "",
+			wantTool:   "",
+			wantDriver: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotTool, gotDriver := classifyToolchainMismatch([]byte(tc.in))
+			if gotTool != tc.wantTool || gotDriver != tc.wantDriver {
+				t.Errorf("classifyToolchainMismatch(...) = (%q, %q), want (%q, %q)",
+					gotTool, gotDriver, tc.wantTool, tc.wantDriver)
+			}
+		})
+	}
+}
+
 func TestProfileWritten(t *testing.T) {
 	dir := t.TempDir()
 

@@ -33,6 +33,7 @@ covlens          # run from any Go repo; checks diff + total coverage, opens HTM
   - [Recommended layout for e2e tests](#recommended-layout-for-e2e-tests)
   - [Race detection](#race-detection)
 - [How diff coverage is calculated](#how-diff-coverage-is-calculated)
+- [Troubleshooting](#troubleshooting)
 - [License](#license)
 
 ---
@@ -246,6 +247,29 @@ For each changed file, covlens:
 3. Sums only the statements that fall within changed lines
 
 This means: if you added 20 lines and all 20 are covered, diff coverage is 100% even if the rest of the file is untested.
+
+## Troubleshooting
+
+### `compile: version "goX" does not match go tool version "goY"`
+
+You'll see this when your **system Go is older than the version your project requires** (e.g. system `go1.25.10`, but `go.mod`/`go.work` declares `go 1.26`):
+
+```
+# sync/atomic
+compile: version "go1.26.0" does not match go tool version "go1.25.10"
+```
+
+It surfaces under covlens but not under a plain `go test`, because it's triggered specifically by **coverage instrumentation**. With `GOTOOLCHAIN=auto`, your system `go` re-execs into the newer downloaded toolchain — but the `covdata` step invokes a bare `go` resolved from `PATH`, which lands on your older system binary while pointed at the newer toolchain's files. That driver/toolchain mismatch is the error. This is an open Go bug: [golang/go#77820](https://github.com/golang/go/issues/77820).
+
+**Fix** — pick one:
+
+- Set `GOTOOLCHAIN` to the version your project requires, so every `go` invocation (including the nested one) uses it:
+  ```bash
+  GOTOOLCHAIN=go1.26.0 covlens
+  ```
+- Or upgrade your system Go to match the project.
+
+`go clean -cache` does **not** help, and `GOTOOLCHAIN=local` fails outright when the project requires a newer Go than you have installed.
 
 ## License
 

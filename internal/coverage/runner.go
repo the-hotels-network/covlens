@@ -40,6 +40,31 @@ func missingToolHint(tool, root string) error {
 		"directive, or set GOTOOLCHAIN=local to use the system Go directly", tool, root)
 }
 
+// toolchainMismatchRe matches the `<tool>: version "goX" does not match go tool
+// version "goY"` error Go emits when the auto-toolchain re-exec is broken: the
+// go driver from one version ends up paired with a compile/link/asm binary from
+// another. Almost always caused by a forced GOROOT (pointing the downloaded
+// toolchain at the wrong root) or a stale build/toolchain cache after an upgrade.
+var toolchainMismatchRe = regexp.MustCompile(`version "(go[0-9.]+)" does not match go tool version "(go[0-9.]+)"`)
+
+// classifyToolchainMismatch returns (toolVer, driverVer) parsed from the marker
+// pattern if present, or empty strings otherwise.
+func classifyToolchainMismatch(combined []byte) (toolVer, driverVer string) {
+	m := toolchainMismatchRe.FindSubmatch(combined)
+	if m == nil {
+		return "", ""
+	}
+	return string(m[1]), string(m[2])
+}
+
+// toolchainMismatchHint returns user-actionable guidance when Go's auto-toolchain
+// re-exec lands a mismatched compiler/driver pair during coverage instrumentation.
+func toolchainMismatchHint(toolVer, driverVer, root string) error {
+	return fmt.Errorf("go toolchain mismatch in %s: compiler %s vs driver %s "+
+		"(system Go older than the project requires). Fix: set GOTOOLCHAIN=%s or upgrade your system Go",
+		root, toolVer, driverVer, toolVer)
+}
+
 // RunResult holds the outcome of a multi-module coverage run.
 type RunResult struct {
 	// ProfilePath is the path to the merged coverage profile.
@@ -47,9 +72,9 @@ type RunResult struct {
 }
 
 // runModule executes `go test` for a single module root and reports the outcome.
-// tool is non-empty when the run failed because a required toolchain tool is absent;
-// callers should propagate that as an immediate error via missingToolHint.
-func runModule(ctx context.Context, root string, goTestArgs []string, profPath string, output io.Writer) (written bool, tool string, err error) {
+// hint is non-nil when the run failed with a recognized, actionable toolchain
+// problem; callers should propagate it immediately instead of the raw run error.
+func runModule(ctx context.Context, root string, goTestArgs []string, profPath string, output io.Writer) (written bool, hint, err error) {
 	cmd := exec.CommandContext(ctx, "go", goTestArgs...)
 	cmd.Dir = root
 	var capture bytes.Buffer
@@ -57,7 +82,11 @@ func runModule(ctx context.Context, root string, goTestArgs []string, profPath s
 	cmd.Stderr = io.MultiWriter(output, &capture)
 	err = cmd.Run()
 	if err != nil {
-		tool = classifyMissingTool(capture.Bytes())
+		if tool := classifyMissingTool(capture.Bytes()); tool != "" {
+			hint = missingToolHint(tool, root)
+		} else if toolVer, driverVer := classifyToolchainMismatch(capture.Bytes()); toolVer != "" {
+			hint = toolchainMismatchHint(toolVer, driverVer, root)
+		}
 	}
 	written = profileWritten(profPath)
 	return
@@ -85,9 +114,9 @@ func RunTotal(ctx context.Context, moduleRoots []string, outputDir string, outpu
 	for i, root := range moduleRoots {
 		prof := filepath.Join(outputDir, fmt.Sprintf("total_%d.out", i))
 		args := []string{"test", "-short", "-count=1", "-coverprofile=" + prof, "-covermode=atomic", "./..."}
-		written, tool, runErr := runModule(ctx, root, args, prof, output)
-		if tool != "" {
-			return res, missingToolHint(tool, root)
+		written, hint, runErr := runModule(ctx, root, args, prof, output)
+		if hint != nil {
+			return res, hint
 		}
 		if runErr != nil && !written {
 			compileFailures = append(compileFailures, fmt.Sprintf("%s: %v", root, runErr))
@@ -132,9 +161,9 @@ func RunDiff(ctx context.Context, grouped map[string][]string, outputDir string,
 		covPkg := strings.Join(pkgs, ",")
 		args := []string{"test", "-short", "-count=1", "-coverprofile=" + prof, "-covermode=atomic", "-coverpkg=" + covPkg}
 		args = append(args, pkgs...)
-		written, tool, runErr := runModule(ctx, root, args, prof, output)
-		if tool != "" {
-			return res, missingToolHint(tool, root)
+		written, hint, runErr := runModule(ctx, root, args, prof, output)
+		if hint != nil {
+			return res, hint
 		}
 		if runErr != nil && !written {
 			compileFailures = append(compileFailures, fmt.Sprintf("%s: %v", root, runErr))
