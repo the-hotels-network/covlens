@@ -91,13 +91,12 @@
     <h3>Changed files</h3>
     <table>
       <thead>
-        <tr><th>File</th><th>Package</th><th>Coverage</th><th>Status</th></tr>
+        <tr><th>File</th><th>Coverage</th><th>Status</th></tr>
       </thead>
       <tbody>
       {{range .Files}}{{if or (not .Excluded) $.ShowExcluded}}
         <tr>
           <td class="file"><a href="#file-{{.Path}}">{{.Path}}</a></td>
-          <td>{{.Package}}</td>
           {{if .Excluded}}
           <td>&mdash;</td>
           <td><span class="excluded-badge">excluded</span></td>
