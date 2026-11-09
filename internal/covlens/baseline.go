@@ -1,7 +1,8 @@
 package covlens
 
 import (
-	"io"
+	"bytes"
+	"fmt"
 	"os"
 
 	"golang.org/x/tools/cover"
@@ -38,8 +39,12 @@ func (r *runner) baselineTotalCoverage(scope coverageScope) (float64, error) {
 	}
 	defer os.RemoveAll(baseOutputDir)
 
-	res, err := coverage.RunTotal(r.ctx, baseRoots, baseOutputDir, io.Discard)
+	var out bytes.Buffer
+	res, err := coverage.RunTotal(r.ctx, baseRoots, baseOutputDir, &out)
 	if err != nil {
+		if excerpt := coverage.FailureExcerpt(out.Bytes()); excerpt != "" {
+			return 0, fmt.Errorf("%w\n--- baseline test output (merge-base %s) ---\n%s", err, scope.mergeBase, excerpt)
+		}
 		return 0, err
 	}
 	profiles, err := cover.ParseProfiles(res.ProfilePath)

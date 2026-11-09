@@ -1,0 +1,11 @@
+-- output --
+# example.com/d
+d/foo.go:3:2: undefined: bar
+FAIL	example.com/d [build failed]
+ok  	example.com/a	0.010s	coverage: 80.0% of statements
+FAIL
+-- want --
+# example.com/d
+d/foo.go:3:2: undefined: bar
+FAIL	example.com/d [build failed]
+FAIL

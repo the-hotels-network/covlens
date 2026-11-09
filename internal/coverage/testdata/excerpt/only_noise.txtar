@@ -1,0 +1,6 @@
+-- output --
+go: downloading github.com/foo/bar v1.0.0
+ok  	example.com/a	0.010s	coverage: 80.0% of statements
+?   	example.com/b	[no test files]
+	example.com/c		coverage: 0.0% of statements
+-- want --
