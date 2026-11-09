@@ -1,0 +1,19 @@
+-- output --
+go: downloading github.com/foo/bar v1.0.0
+ok  	example.com/a	0.010s	coverage: 80.0% of statements
+?   	example.com/b	[no test files]
+	example.com/c		coverage: 0.0% of statements
+--- FAIL: TestFoo (0.00s)
+    foo_test.go:6: want 1, got 2
+FAIL
+coverage: 50.0% of statements
+FAIL	example.com/d	0.012s
+ok  	example.com/e	0.011s	coverage: 90.0% of statements
+FAIL
+-- want --
+--- FAIL: TestFoo (0.00s)
+    foo_test.go:6: want 1, got 2
+FAIL
+coverage: 50.0% of statements
+FAIL	example.com/d	0.012s
+FAIL

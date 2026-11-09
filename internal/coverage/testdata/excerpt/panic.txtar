@@ -1,0 +1,16 @@
+-- output --
+ok  	example.com/a	0.010s	coverage: 80.0% of statements
+panic: runtime error: index out of range [3] with length 2
+
+goroutine 7 [running]:
+example.com/d.Foo(...)
+	/tmp/covlens-baseline-1/d/foo.go:12
+FAIL	example.com/d	0.012s
+FAIL
+-- want --
+panic: runtime error: index out of range [3] with length 2
+goroutine 7 [running]:
+example.com/d.Foo(...)
+	/tmp/covlens-baseline-1/d/foo.go:12
+FAIL	example.com/d	0.012s
+FAIL
